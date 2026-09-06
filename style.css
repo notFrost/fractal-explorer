@@ -1,0 +1,292 @@
+/* Palette lifted from the original: black backdrop, pen base #0400ff,
+   and the magenta the escape gradient starts at. */
+:root {
+  --bg: #000000;
+  --ink: #ece8f4;
+  --dim: #6b6680;
+  --line: #1d1b2a;
+  --panel: rgba(8, 7, 14, 0.82);
+  --blue: #0400ff;
+  --magenta: #ff2bd6;
+
+  --display: "Bahnschrift", "Avenir Next Condensed", "Arial Narrow", "Roboto Condensed", "Helvetica Neue", system-ui, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--magenta);
+  outline-offset: 3px;
+}
+
+/* ---------- Menu ---------- */
+
+.menu {
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 2rem;
+  padding: clamp(1.25rem, 4vw, 3rem);
+}
+
+.menu-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: end;
+  gap: 2rem;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--display);
+  font-stretch: condensed;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: clamp(3.5rem, 12vw, 9rem);
+  line-height: 0.85;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+.lede {
+  margin: 0 0 0.35em;
+  max-width: 34ch;
+  color: var(--dim);
+}
+
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  align-content: center;
+}
+
+.card {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  transform: rotate(0deg) scale(1);
+  transition: transform 220ms ease;
+}
+
+.card-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--line);
+  background: #000;
+  image-rendering: auto;
+}
+
+.card-name {
+  font-family: var(--display);
+  font-stretch: condensed;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 1.6rem;
+  letter-spacing: 0.02em;
+}
+
+.card-formula {
+  color: var(--dim);
+  white-space: pre;
+}
+
+.card:hover,
+.card:focus-visible {
+  transform: scale(1.06);
+  animation: wobble 900ms ease-in-out infinite;
+}
+
+.card:hover .card-name,
+.card:focus-visible .card-name {
+  color: var(--magenta);
+}
+
+/* The original rocked hovered buttons between 88° and 92°. */
+@keyframes wobble {
+  0%   { transform: scale(1.06) rotate(0deg); }
+  25%  { transform: scale(1.06) rotate(2deg); }
+  75%  { transform: scale(1.06) rotate(-2deg); }
+  100% { transform: scale(1.06) rotate(0deg); }
+}
+
+.menu-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  color: var(--dim);
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+
+/* ---------- Viewer ---------- */
+
+.viewer {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+
+.viewer[hidden] { display: none; }
+
+.view {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+}
+
+.view.dragging { cursor: grabbing; }
+
+.topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+
+.set-name {
+  margin-right: auto;
+  font-family: var(--display);
+  font-stretch: condensed;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 1.25rem;
+  letter-spacing: 0.04em;
+}
+
+.btn {
+  padding: 0.45rem 0.8rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+}
+
+.btn:hover { border-color: var(--dim); }
+
+.btn-accent {
+  border-color: var(--magenta);
+  color: var(--magenta);
+}
+
+.btn-accent:hover {
+  background: var(--magenta);
+  color: #000;
+}
+
+.hud {
+  position: absolute;
+  left: 0.75rem;
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
+  padding: 0.6rem 0.8rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+  display: grid;
+  gap: 0.15rem;
+  max-width: calc(100vw - 1.5rem);
+}
+
+.hud-row { white-space: nowrap; }
+.hud-c { font-size: 1.1rem; }
+.hud-k { color: var(--dim); display: inline-block; min-width: 4ch; }
+.hud-dim { color: var(--dim); }
+
+.hud-bookmarks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.hud-bookmarks:empty { display: none; }
+
+.bookmark {
+  color: var(--dim);
+  border-bottom: 1px dotted var(--dim);
+}
+
+.bookmark:hover { color: var(--magenta); border-color: var(--magenta); }
+
+.help {
+  position: absolute;
+  right: 0.75rem;
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
+  margin: 0;
+  color: var(--dim);
+  text-align: right;
+}
+
+.touchbar {
+  display: none;
+  position: absolute;
+  right: 0.75rem;
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
+  gap: 0.5rem;
+}
+
+.tbtn {
+  width: 3rem;
+  height: 3rem;
+  font-size: 1.4rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+}
+
+.tbtn:active { background: var(--magenta); color: #000; }
+
+@media (pointer: coarse) {
+  .help { display: none; }
+  .touchbar { display: flex; }
+}
+
+@media (max-width: 720px) {
+  .menu-head { grid-template-columns: 1fr; }
+  .cards { grid-template-columns: 1fr; gap: 1rem; }
+  .card { grid-template-columns: 1fr; }
+  .hud-c { font-size: 0.95rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card { transition: none; }
+  .card:hover, .card:focus-visible { animation: none; transform: scale(1.03); }
+}

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Fractal Explorer</title>
+  <meta name="color-scheme" content="dark" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main id="menu" class="menu">
+    <header class="menu-head">
+      <h1 class="title">Fractal<br />Explorer</h1>
+      <p class="lede">Three escape-time sets. Pick one, then pan and zoom until something looks worth keeping.</p>
+    </header>
+
+    <ul class="cards" id="cards" aria-label="Fractal sets">
+      <li>
+        <button class="card" data-set="mandelbrot" type="button">
+          <canvas class="card-canvas" width="240" height="180" aria-hidden="true"></canvas>
+          <span class="card-name">Mandelbrot</span>
+          <span class="card-formula">z ← z² + c</span>
+        </button>
+      </li>
+      <li>
+        <button class="card" data-set="collatz" type="button">
+          <canvas class="card-canvas" width="240" height="180" aria-hidden="true"></canvas>
+          <span class="card-name">Collatz</span>
+          <span class="card-formula">z ← 3z + 1  or  z / 2</span>
+        </button>
+      </li>
+      <li>
+        <button class="card" data-set="webb" type="button">
+          <canvas class="card-canvas" width="240" height="180" aria-hidden="true"></canvas>
+          <span class="card-name">Webb</span>
+          <span class="card-formula">zₙ₊₁ ← zₙ² + zₙ₋₁</span>
+        </button>
+      </li>
+    </ul>
+
+    <footer class="menu-foot">
+      <span>Ported from a PenguinMod project.</span>
+      <span>WASD pan · Q E zoom · Space saves a PNG</span>
+    </footer>
+  </main>
+
+  <section id="viewer" class="viewer" hidden>
+    <canvas id="view" class="view"></canvas>
+
+    <div class="topbar">
+      <button id="back" class="btn" type="button" title="Back to menu (Esc)">← Menu</button>
+      <span id="set-name" class="set-name"></span>
+      <button id="save" class="btn btn-accent" type="button" title="Render and download PNG (Space)">Save PNG</button>
+    </div>
+
+    <aside class="hud" aria-live="polite">
+      <div class="hud-row hud-c"><span class="hud-k">c</span> <span id="hud-c">0 + 0i</span></div>
+      <div class="hud-row"><span class="hud-k">zoom</span> <span id="hud-zoom">100×</span></div>
+      <div class="hud-row"><span class="hud-k">iter</span> <span id="hud-iter">50</span> <span class="hud-dim">detail ×<span id="hud-detail">1</span></span></div>
+      <div class="hud-row hud-dim"><span id="hud-status">idle</span></div>
+      <div class="hud-row hud-bookmarks" id="bookmarks"></div>
+    </aside>
+
+    <div class="touchbar" aria-label="Touch controls">
+      <button class="tbtn" data-act="zoom-out" type="button" aria-label="Zoom out">−</button>
+      <button class="tbtn" data-act="zoom-in" type="button" aria-label="Zoom in">+</button>
+      <button class="tbtn" data-act="detail-down" type="button" aria-label="Less detail">◔</button>
+      <button class="tbtn" data-act="detail-up" type="button" aria-label="More detail">●</button>
+    </div>
+
+    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · [ ] detail · Space saves</p>
+  </section>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
