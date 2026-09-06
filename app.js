@@ -57,8 +57,14 @@ function updateHud() {
   hud.detail.textContent = String(state.detail);
 }
 
-function writeHash() {
-  history.replaceState(null, '', `#${state.set}@${state.x},${state.y},${state.zoom}`);
+// The URL is updated after input settles, never per frame.
+let hashTimer = 0;
+function scheduleHash() {
+  clearTimeout(hashTimer);
+  hashTimer = setTimeout(() => {
+    if (mode !== 'view') return;
+    history.replaceState(null, '', `#${state.set}@${state.x},${state.y},${state.zoom}`);
+  }, 300);
 }
 
 function readHash() {
@@ -99,10 +105,9 @@ function render() {
   if (mode !== 'view' || !renderer) return;
   fitCanvas();
   state.zoom = clampZoom(state.zoom);
-  const maxIter = iterationsFor(state.zoom, state.detail);
-  renderer.render({ ...state, maxIter });
+  renderer.render({ ...state, maxIter: iterationsFor(state.zoom, state.detail) });
   updateHud();
-  writeHash();
+  scheduleHash();
 
   const seq = ++statusSeq;
   hud.status.textContent = `${canvas.width}×${canvas.height} · GPU`;
@@ -114,7 +119,7 @@ function render() {
 
 // Render at twice the screen size, download, then restore the view.
 function savePng() {
-  if (!renderer) return;
+  if (!renderer || mode !== 'view') return;
   const cap = renderer.maxSide;
   const scale = Math.min(2, cap / canvas.width, cap / canvas.height);
   const w = canvas.width;
@@ -138,18 +143,34 @@ function savePng() {
   renderer.render({ ...state, maxIter: iterationsFor(state.zoom, state.detail) });
 }
 
-// ---------- Input ----------
+// ---------- Continuous motion (keys held, joystick deflected) ----------
 
 const keys = new Set();
+const joy = { x: 0, y: 0, active: false };
+let motionLoop = false;
 let lastTick = 0;
 
+function motionWanted() {
+  return keys.size > 0 || joy.active;
+}
+
+function startMotion() {
+  if (motionLoop) return;
+  motionLoop = true;
+  lastTick = performance.now();
+  requestAnimationFrame(tick);
+}
+
 function tick(now) {
-  if (mode !== 'view') return;
-  if (!keys.size) return;
+  if (mode !== 'view' || !motionWanted()) {
+    motionLoop = false;
+    return;
+  }
   const dt = Math.min(0.05, (now - lastTick) / 1000) || 0;
   lastTick = now;
   let moved = false;
 
+  // Stage pixels per second divided by zoom, like the original's 10 px per loop.
   const fast = keys.has('shift') ? 2 : 1;
   const pan = (300 * fast * dt) / state.zoom;
   if (keys.has('a') || keys.has('arrowleft')) { state.x -= pan; moved = true; }
@@ -161,9 +182,18 @@ function tick(now) {
   if (keys.has('e')) { state.zoom = clampZoom(state.zoom * zf); moved = true; }
   if (keys.has('q')) { state.zoom = clampZoom(state.zoom / zf); moved = true; }
 
+  // Joystick: the original moved the camera by stick offset / (zoom × 3) per loop.
+  if (joy.active && (joy.x || joy.y)) {
+    state.x += (joy.x * 240 * dt) / state.zoom;
+    state.y += (joy.y * 240 * dt) / state.zoom;
+    moved = true;
+  }
+
   if (moved) requestRender();
   requestAnimationFrame(tick);
 }
+
+// ---------- Keyboard ----------
 
 const movementKeys = new Set(['a', 'd', 'w', 's', 'q', 'e', 'shift', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown']);
 
@@ -173,11 +203,8 @@ window.addEventListener('keydown', (e) => {
   if (movementKeys.has(k)) {
     e.preventDefault();
     if (keys.has(k)) return;
-    if (!keys.size) {
-      lastTick = performance.now();
-      requestAnimationFrame(tick);
-    }
     keys.add(k);
+    startMotion();
     // One discrete step on the tap; holding continues in tick().
     const fast = e.shiftKey ? 2 : 1;
     const pan = (10 * fast) / state.zoom;
@@ -206,6 +233,8 @@ function changeDetail(dir) {
   requestRender();
 }
 
+// ---------- Pointer: drag, wheel, pinch ----------
+
 // Zoom keeping the world point under (px, py) fixed.
 function zoomAt(px, py, factor) {
   const dpr = canvas.width / canvas.clientWidth;
@@ -220,6 +249,10 @@ function zoomAt(px, py, factor) {
   requestRender();
 }
 
+function zoomCentre(factor) {
+  zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, factor);
+}
+
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   zoomAt(e.clientX, e.clientY, Math.pow(1.2, -e.deltaY / 100));
@@ -229,7 +262,7 @@ const pointers = new Map();
 let pinch = null;
 
 canvas.addEventListener('pointerdown', (e) => {
-  canvas.setPointerCapture(e.pointerId);
+  try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   canvas.classList.add('dragging');
   if (pointers.size === 2) {
@@ -266,25 +299,91 @@ const endPointer = (e) => {
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
 
-for (const btn of document.querySelectorAll('.tbtn')) {
-  let timer = null;
+// ---------- Touch controls, after the original's mobile mode ----------
+// Joystick bottom-right; zoom-in on the left edge with the screenshot button
+// under it; zoom-out on the right edge. Buttons repeat while held.
+
+const touchToggle = $('#touch-toggle');
+
+function setTouch(on) {
+  document.body.classList.toggle('touch', on);
+  touchToggle.setAttribute('aria-pressed', String(on));
+  localStorage.setItem('touch', on ? '1' : '0');
+}
+
+{
+  const saved = localStorage.getItem('touch');
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+  setTouch(saved === null ? coarse : saved === '1');
+}
+
+touchToggle.addEventListener('click', () => setTouch(!document.body.classList.contains('touch')));
+
+for (const btn of document.querySelectorAll('.tbtn[data-act]')) {
   const act = btn.dataset.act;
+  let timer = 0;
   const fire = () => {
-    if (act === 'zoom-in') zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 1.1);
-    if (act === 'zoom-out') zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 1 / 1.1);
+    if (act === 'zoom-in') zoomCentre(1.1);
+    if (act === 'zoom-out') zoomCentre(1 / 1.1);
   };
+  const stop = () => { clearInterval(timer); timer = 0; };
   btn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
+    if (act === 'save') return savePng();
     if (act === 'detail-up') return changeDetail(1);
     if (act === 'detail-down') return changeDetail(-1);
     fire();
+    stop();
     timer = setInterval(fire, 60);
   });
-  const stop = () => { clearInterval(timer); timer = null; };
   btn.addEventListener('pointerup', stop);
   btn.addEventListener('pointercancel', stop);
   btn.addEventListener('pointerleave', stop);
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
 }
+
+const joystick = $('#joystick');
+const stick = joystick.querySelector('.stick');
+let joyPointer = null;
+
+function moveStick(e) {
+  const r = joystick.getBoundingClientRect();
+  const max = r.width * 0.3;
+  let dx = e.clientX - (r.left + r.width / 2);
+  let dy = e.clientY - (r.top + r.height / 2);
+  const len = Math.hypot(dx, dy);
+  if (len > max) {
+    dx *= max / len;
+    dy *= max / len;
+  }
+  stick.style.transform = `translate(${dx}px, ${dy}px)`;
+  joy.x = dx / max;
+  joy.y = -dy / max;
+}
+
+joystick.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  try { joystick.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
+  joyPointer = e.pointerId;
+  joy.active = true;
+  moveStick(e);
+  startMotion();
+});
+
+joystick.addEventListener('pointermove', (e) => {
+  if (e.pointerId === joyPointer) moveStick(e);
+});
+
+const releaseStick = (e) => {
+  if (e.pointerId !== joyPointer) return;
+  joyPointer = null;
+  joy.active = false;
+  joy.x = 0;
+  joy.y = 0;
+  stick.style.transform = '';
+};
+joystick.addEventListener('pointerup', releaseStick);
+joystick.addEventListener('pointercancel', releaseStick);
 
 $('#save').addEventListener('click', savePng);
 $('#back').addEventListener('click', showMenu);
@@ -302,6 +401,7 @@ function showViewer(set, view) {
   mode = 'view';
   menu.hidden = true;
   viewer.hidden = false;
+  document.body.classList.add('viewing');
   $('#set-name').textContent = SETS[set].name;
 
   hud.bookmarks.replaceChildren(
@@ -325,9 +425,12 @@ function showViewer(set, view) {
 
 function showMenu() {
   keys.clear();
+  joy.active = false;
   mode = 'menu';
   viewer.hidden = true;
   menu.hidden = false;
+  document.body.classList.remove('viewing');
+  clearTimeout(hashTimer);
   history.replaceState(null, '', location.pathname);
   renderCards();
 }
@@ -354,10 +457,14 @@ for (const card of document.querySelectorAll('.card')) {
 
 // ---------- Boot ----------
 
-window.__fx = { state, showViewer, showMenu, renderCards, renderer, iterationsFor };
+window.__fx = { state, showViewer, showMenu, renderCards, render, renderer, iterationsFor, joy };
 
 if (readHash()) {
   showViewer(state.set);
 } else {
   renderCards();
+}
+
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
 }

@@ -26,6 +26,21 @@ not load from `file://`. Any static server works. Needs a browser with WebGL2.
 The URL hash stores the set, centre, and zoom, so a view can be bookmarked or
 shared.
 
+## Touch controls and the installable app
+
+The touch layout follows the original's mobile mode: zoom-in and the
+screenshot button on the left edge, zoom-out on the right edge, and a pan
+joystick bottom-right. Buttons repeat while held, the joystick pans at a rate
+proportional to its deflection, and drag-to-pan and pinch-to-zoom work on the
+canvas as well. The layout turns on automatically for coarse pointers and can
+be toggled with the Touch button in the top bar. The choice is remembered.
+
+`manifest.webmanifest` and `sw.js` make it a Progressive Web App. Install it
+from the browser menu on a phone or desktop. The service worker caches the
+app shell network-first, so edits show up on reload and the explorer keeps
+working offline once it has loaded. Icons are `icon.svg` and two PNGs
+rasterised from it.
+
 ## Rendering
 
 One fullscreen triangle, one draw call per frame, one fragment shader per set.
@@ -52,6 +67,12 @@ wheel, brightness `t × 5` clamped, inside points black.
 
 **Timing** in the HUD comes from `EXT_disjoint_timer_query_webgl2` when the
 browser exposes it. Otherwise only the resolution is shown.
+
+**Per-frame allocation is zero.** The reference orbit is written into one
+preallocated buffer and uploaded with `texSubImage2D` into a texture sized once
+for the iteration cap. Only one timer query is ever live. The URL hash is
+written after input settles rather than every frame. A soak of 4500 frames
+across sets holds the JS heap flat at 2 MB.
 
 ## Ported from the original
 

@@ -37,21 +37,23 @@ export function iterationsFor(zoom, detail = 1) {
   return Math.min(MAX_ITER, base * detail);
 }
 
-// Orbit of the centre point in doubles. Entry 0 is Z_0 = 0, entry 1 is c.
-// Stops one step after escaping so the shader always sees a huge final Z.
-export function referenceOrbit(cx, cy, maxIter) {
-  const data = new Float32Array((maxIter + 2) * 2);
+// Orbit of the centre point in doubles, written into `out` as interleaved
+// (re, im) pairs. Entry 0 is Z_0 = 0, entry 1 is c. Stops one step after
+// escaping so the shader always sees a huge final Z. Returns the entry count.
+export function referenceOrbit(cx, cy, maxIter, out) {
   let zr = 0;
   let zi = 0;
+  out[0] = 0;
+  out[1] = 0;
   let n = 1;
   for (let i = 0; i < maxIter; i++) {
     const nr = zr * zr - zi * zi + cx;
     zi = 2 * zr * zi + cy;
     zr = nr;
-    data[2 * n] = zr;
-    data[2 * n + 1] = zi;
+    out[2 * n] = zr;
+    out[2 * n + 1] = zi;
     n++;
     if (zr * zr + zi * zi > 1e10) break;
   }
-  return { data, len: n };
+  return n;
 }

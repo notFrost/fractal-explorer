@@ -2,9 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <title>Fractal Explorer</title>
   <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -41,7 +48,7 @@
     </ul>
 
     <footer class="menu-foot">
-      <span>Ported from a PenguinMod project.</span>
+      <span>Ported from a PenguinMod project. Renders on the GPU.</span>
       <span>WASD pan · Q E zoom · Space saves a PNG</span>
     </footer>
   </main>
@@ -52,22 +59,34 @@
     <div class="topbar">
       <button id="back" class="btn" type="button" title="Back to menu (Esc)">← Menu</button>
       <span id="set-name" class="set-name"></span>
+      <button id="touch-toggle" class="btn" type="button" aria-pressed="false" title="Show touch controls">Touch</button>
       <button id="save" class="btn btn-accent" type="button" title="Render and download PNG (Space)">Save PNG</button>
     </div>
 
     <aside class="hud" aria-live="polite">
       <div class="hud-row hud-c"><span class="hud-k">c</span> <span id="hud-c">0 + 0i</span></div>
       <div class="hud-row"><span class="hud-k">zoom</span> <span id="hud-zoom">100×</span></div>
-      <div class="hud-row"><span class="hud-k">iter</span> <span id="hud-iter">50</span> <span class="hud-dim">detail ×<span id="hud-detail">1</span></span></div>
+      <div class="hud-row"><span class="hud-k">iter</span> <span id="hud-iter">200</span> <span class="hud-dim">detail ×<span id="hud-detail">1</span></span></div>
       <div class="hud-row hud-dim"><span id="hud-status">idle</span></div>
       <div class="hud-row hud-bookmarks" id="bookmarks"></div>
     </aside>
 
-    <div class="touchbar" aria-label="Touch controls">
-      <button class="tbtn" data-act="zoom-out" type="button" aria-label="Zoom out">−</button>
+    <!-- Touch layout after the original's mobile mode -->
+    <div class="touch-ui touch-left">
       <button class="tbtn" data-act="zoom-in" type="button" aria-label="Zoom in">+</button>
-      <button class="tbtn" data-act="detail-down" type="button" aria-label="Less detail">◔</button>
-      <button class="tbtn" data-act="detail-up" type="button" aria-label="More detail">●</button>
+      <button class="tbtn" data-act="save" type="button" aria-label="Save PNG">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>
+      </button>
+    </div>
+    <div class="touch-ui touch-right">
+      <button class="tbtn" data-act="zoom-out" type="button" aria-label="Zoom out">−</button>
+    </div>
+    <div class="touch-ui touch-detail">
+      <button class="tbtn tbtn-small" data-act="detail-down" type="button" aria-label="Less detail">◔</button>
+      <button class="tbtn tbtn-small" data-act="detail-up" type="button" aria-label="More detail">●</button>
+    </div>
+    <div class="touch-ui joystick" id="joystick" aria-label="Pan joystick">
+      <div class="stick"></div>
     </div>
 
     <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · [ ] detail · Space saves</p>

@@ -1,4 +1,4 @@
-import { referenceOrbit } from './fractals.js';
+import { MAX_ITER, referenceOrbit } from './fractals.js';
 
 const VERT = `#version 300 es
 void main() {
@@ -162,27 +162,31 @@ export class Renderer {
         ),
       };
     }
+    // One fixed-size texture and one staging buffer, reused for every frame.
+    this.refRows = Math.ceil((MAX_ITER + 2) / REF_W);
+    this.refBuf = new Float32Array(REF_W * this.refRows * 2);
     this.refTex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.refTex);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RG32F, REF_W, this.refRows);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     this.refKey = '';
     this.refLen = 0;
+    this.pendingQuery = null;
+    this.timing = null;
     this.maxSide = Math.min(gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0], 8192);
   }
 
   uploadReference(x, y, maxIter) {
     const key = `${x},${y},${maxIter}`;
     if (key === this.refKey) return;
-    const { data, len } = referenceOrbit(x, y, maxIter);
+    const len = referenceOrbit(x, y, maxIter, this.refBuf);
     const rows = Math.ceil(len / REF_W);
-    const padded = new Float32Array(REF_W * rows * 2);
-    padded.set(data.subarray(0, len * 2));
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.refTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, REF_W, rows, 0, gl.RG, gl.FLOAT, padded);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, REF_W, rows, gl.RG, gl.FLOAT, this.refBuf, 0);
     this.refKey = key;
     this.refLen = len;
   }
@@ -220,21 +224,30 @@ export class Renderer {
   }
 
   // Resolves with GPU time in ms for the most recent timed frame, or null.
-  async gpuTime() {
-    const gl = this.gl;
+  // Single-flight: concurrent callers share one poll of the one live query.
+  gpuTime() {
+    if (this.timing) return this.timing;
     const q = this.pendingQuery;
-    if (!q) return null;
+    if (!q) return Promise.resolve(null);
+    this.timing = this.pollQuery(q).finally(() => { this.timing = null; });
+    return this.timing;
+  }
+
+  async pollQuery(q) {
+    const gl = this.gl;
+    let result = null;
     for (let i = 0; i < 50; i++) {
       await new Promise((r) => setTimeout(r, 16));
-      if (this.lost || this.pendingQuery !== q) return null;
+      if (this.lost) return null;
       if (gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) {
         const disjoint = gl.getParameter(this.timer.GPU_DISJOINT_EXT);
         const ns = gl.getQueryParameter(q, gl.QUERY_RESULT);
-        gl.deleteQuery(q);
-        this.pendingQuery = null;
-        return disjoint ? null : ns / 1e6;
+        result = disjoint ? null : ns / 1e6;
+        break;
       }
     }
-    return null;
+    gl.deleteQuery(q);
+    this.pendingQuery = null;
+    return result;
   }
 }
