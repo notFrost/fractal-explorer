@@ -1,118 +1,5 @@
-import { SETS, iterationsFor } from './fractals.js';
-
-// ---------- Worker pool (pull model: idle workers fetch the next band) ----------
-
-class RenderPool {
-  constructor(size) {
-    this.workers = [];
-    this.idle = [];
-    this.queue = [];
-    this.jobs = new Map();
-    for (let i = 0; i < size; i++) {
-      const w = new Worker('./worker.js', { type: 'module' });
-      w.onmessage = (e) => this.onResult(w, e.data);
-      this.workers.push(w);
-      this.idle.push(w);
-    }
-  }
-
-  // tasks: array of band descriptors sharing one job id.
-  run(id, tasks, onBand) {
-    let remaining = tasks.length;
-    let resolve;
-    const done = new Promise((r) => { resolve = r; });
-    this.jobs.set(id, {
-      onBand,
-      tick: () => {
-        remaining--;
-        if (remaining === 0) {
-          this.jobs.delete(id);
-          resolve(true);
-        }
-      },
-      cancel() { resolve(false); },
-    });
-    for (const t of tasks) this.queue.push(t);
-    this.pump();
-    return done;
-  }
-
-  cancel(id) {
-    this.queue = this.queue.filter((t) => t.id !== id);
-    const job = this.jobs.get(id);
-    if (job) {
-      job.cancel();
-      this.jobs.delete(id);
-    }
-  }
-
-  pump() {
-    while (this.idle.length && this.queue.length) {
-      const w = this.idle.pop();
-      w.postMessage(this.queue.shift());
-    }
-  }
-
-  onResult(w, msg) {
-    this.idle.push(w);
-    const job = this.jobs.get(msg.id);
-    if (job) {
-      job.onBand(msg);
-      job.tick();
-    }
-    this.pump();
-  }
-}
-
-let poolInstance = null;
-function getPool() {
-  if (!poolInstance) poolInstance = new RenderPool(Math.max(1, Math.min(8, navigator.hardwareConcurrency || 2)));
-  return poolInstance;
-}
-let jobSeq = 0;
-
-// Render one frame into ctx as a sequence of passes (block sizes).
-// Returns a handle with cancel(); `done` resolves true if every pass finished.
-function renderInto(ctx, view, passes, onProgress) {
-  const id = ++jobSeq;
-  const { width: w, height: h } = ctx.canvas;
-  const scale = h / 360;
-  let cancelled = false;
-
-  const runPass = (step, maxIter) => {
-    const rows = Math.max(step, Math.ceil(24 / step) * step);
-    const tasks = [];
-    for (let y0 = 0; y0 < h; y0 += rows) {
-      tasks.push({
-        id, set: view.set, w, h, y0, rows: Math.min(rows, h - y0), step, scale,
-        zoom: view.zoom, camX: view.x, camY: view.y, maxIter,
-      });
-    }
-    return getPool().run(id, tasks, (band) => {
-      const img = new ImageData(new Uint8ClampedArray(band.buf), band.w, band.rows);
-      ctx.putImageData(img, 0, band.y0);
-    });
-  };
-
-  const done = (async () => {
-    const t0 = performance.now();
-    for (const p of passes) {
-      if (cancelled) return false;
-      const ok = await runPass(p.step, p.iter);
-      if (!ok) return false;
-      onProgress?.(p, performance.now() - t0);
-    }
-    return true;
-  })();
-
-  return {
-    done,
-    cancel() {
-      cancelled = true;
-      getPool().cancel(id);
-    },
-  };
-}
+import { SETS, MIN_ZOOM, iterationsFor } from './fractals.js';
+import { Renderer } from './gpu.js';
 
 // ---------- State ----------
 
@@ -128,7 +15,6 @@ const $ = (s) => document.querySelector(s);
 const menu = $('#menu');
 const viewer = $('#viewer');
 const canvas = $('#view');
-const ctx = canvas.getContext('2d', { alpha: false });
 const hud = {
   c: $('#hud-c'),
   zoom: $('#hud-zoom'),
@@ -138,8 +24,15 @@ const hud = {
   bookmarks: $('#bookmarks'),
 };
 
-let current = null;
+let renderer = null;
 let mode = 'menu';
+
+try {
+  renderer = new Renderer(canvas);
+} catch (err) {
+  $('#gpu-error').hidden = false;
+  $('#gpu-error').textContent = `${err.message} This explorer renders on the GPU and needs WebGL2.`;
+}
 
 function fmt(n) {
   const a = Math.abs(n);
@@ -152,6 +45,10 @@ function fmtZoom(z) {
   return Math.round(z).toLocaleString() + '×';
 }
 
+function clampZoom(z) {
+  return Math.min(SETS[state.set].maxZoom, Math.max(MIN_ZOOM, z));
+}
+
 function updateHud() {
   const sign = state.y < 0 ? '−' : '+';
   hud.c.textContent = `${fmt(state.x)} ${sign} ${fmt(Math.abs(state.y))}i`;
@@ -161,8 +58,7 @@ function updateHud() {
 }
 
 function writeHash() {
-  const h = `#${state.set}@${state.x},${state.y},${state.zoom}`;
-  history.replaceState(null, '', h);
+  history.replaceState(null, '', `#${state.set}@${state.x},${state.y},${state.zoom}`);
 }
 
 function readHash() {
@@ -175,7 +71,7 @@ function readHash() {
   return Number.isFinite(state.x) && Number.isFinite(state.y) && state.zoom > 0;
 }
 
-// ---------- Viewer rendering ----------
+// ---------- Rendering ----------
 
 function fitCanvas() {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -188,11 +84,11 @@ function fitCanvas() {
 }
 
 let renderQueued = false;
+let statusSeq = 0;
 
 function requestRender() {
   if (renderQueued) return;
   renderQueued = true;
-  // Coalesce bursts of input into one render per turn of the event loop.
   setTimeout(() => {
     renderQueued = false;
     render();
@@ -200,39 +96,35 @@ function requestRender() {
 }
 
 function render() {
-  if (mode !== 'view') return;
+  if (mode !== 'view' || !renderer) return;
   fitCanvas();
-  current?.cancel();
-  const iter = iterationsFor(state.zoom, state.detail);
-  const passes = [
-    { step: 8, iter },
-    { step: 2, iter },
-    { step: 1, iter },
-  ];
-  hud.status.textContent = 'rendering…';
-  const view = { ...state };
-  current = renderInto(ctx, view, passes, (p, ms) => {
-    if (p.step === 1) {
-      hud.status.textContent = `${canvas.width}×${canvas.height} in ${Math.round(ms)} ms`;
-    }
-  });
+  state.zoom = clampZoom(state.zoom);
+  const maxIter = iterationsFor(state.zoom, state.detail);
+  renderer.render({ ...state, maxIter });
   updateHud();
   writeHash();
+
+  const seq = ++statusSeq;
+  hud.status.textContent = `${canvas.width}×${canvas.height} · GPU`;
+  renderer.gpuTime().then((ms) => {
+    if (seq !== statusSeq || ms === null) return;
+    hud.status.textContent = `${canvas.width}×${canvas.height} · GPU ${ms < 1 ? ms.toFixed(2) : ms.toFixed(1)} ms`;
+  });
 }
 
-// Full-quality render to an offscreen canvas at the on-screen size, then download.
-async function savePng() {
-  const off = document.createElement('canvas');
-  off.width = canvas.width;
-  off.height = canvas.height;
-  const octx = off.getContext('2d', { alpha: false });
-  const iter = iterationsFor(state.zoom, state.detail);
-  hud.status.textContent = 'rendering for download…';
-  const job = renderInto(octx, { ...state }, [{ step: 1, iter }]);
-  const ok = await job.done;
-  if (!ok) return;
+// Render at twice the screen size, download, then restore the view.
+function savePng() {
+  if (!renderer) return;
+  const cap = renderer.maxSide;
+  const scale = Math.min(2, cap / canvas.width, cap / canvas.height);
+  const w = canvas.width;
+  const h = canvas.height;
+  canvas.width = Math.round(w * scale);
+  canvas.height = Math.round(h * scale);
+  renderer.render({ ...state, maxIter: iterationsFor(state.zoom, state.detail) });
   const name = `${state.set}_${fmt(state.x)}_${fmt(state.y)}_${Math.round(state.zoom)}x.png`;
-  off.toBlob((blob) => {
+  hud.status.textContent = `rendering ${canvas.width}×${canvas.height} for download…`;
+  canvas.toBlob((blob) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -241,6 +133,9 @@ async function savePng() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     hud.status.textContent = `saved ${name}`;
   }, 'image/png');
+  canvas.width = w;
+  canvas.height = h;
+  renderer.render({ ...state, maxIter: iterationsFor(state.zoom, state.detail) });
 }
 
 // ---------- Input ----------
@@ -250,11 +145,11 @@ let lastTick = 0;
 
 function tick(now) {
   if (mode !== 'view') return;
+  if (!keys.size) return;
   const dt = Math.min(0.05, (now - lastTick) / 1000) || 0;
   lastTick = now;
   let moved = false;
 
-  // Pan in stage pixels per second, divided by zoom, like the original.
   const fast = keys.has('shift') ? 2 : 1;
   const pan = (300 * fast * dt) / state.zoom;
   if (keys.has('a') || keys.has('arrowleft')) { state.x -= pan; moved = true; }
@@ -262,16 +157,11 @@ function tick(now) {
   if (keys.has('w') || keys.has('arrowup')) { state.y += pan; moved = true; }
   if (keys.has('s') || keys.has('arrowdown')) { state.y -= pan; moved = true; }
 
-  const zf = Math.pow(3, dt); // 1.2 per original loop, about 3× per second here
-  if (keys.has('e')) { state.zoom *= zf; moved = true; }
-  if (keys.has('q')) { state.zoom /= zf; moved = true; }
+  const zf = Math.pow(4, dt);
+  if (keys.has('e')) { state.zoom = clampZoom(state.zoom * zf); moved = true; }
+  if (keys.has('q')) { state.zoom = clampZoom(state.zoom / zf); moved = true; }
 
   if (moved) requestRender();
-  requestAnimationFrame(tick);
-}
-
-function startTicking() {
-  lastTick = performance.now();
   requestAnimationFrame(tick);
 }
 
@@ -279,22 +169,24 @@ const movementKeys = new Set(['a', 'd', 'w', 's', 'q', 'e', 'shift', 'arrowleft'
 
 window.addEventListener('keydown', (e) => {
   if (mode !== 'view') return;
-  if (e.target instanceof HTMLInputElement) return;
   const k = e.key.toLowerCase();
   if (movementKeys.has(k)) {
     e.preventDefault();
     if (keys.has(k)) return;
-    if (!keys.size) startTicking();
+    if (!keys.size) {
+      lastTick = performance.now();
+      requestAnimationFrame(tick);
+    }
     keys.add(k);
-    // One discrete step on the tap, as the original did per loop; holding continues in tick().
+    // One discrete step on the tap; holding continues in tick().
     const fast = e.shiftKey ? 2 : 1;
     const pan = (10 * fast) / state.zoom;
     if (k === 'a' || k === 'arrowleft') state.x -= pan;
     if (k === 'd' || k === 'arrowright') state.x += pan;
     if (k === 'w' || k === 'arrowup') state.y += pan;
     if (k === 's' || k === 'arrowdown') state.y -= pan;
-    if (k === 'e') state.zoom *= 1.2;
-    if (k === 'q') state.zoom /= 1.2;
+    if (k === 'e') state.zoom = clampZoom(state.zoom * 1.2);
+    if (k === 'q') state.zoom = clampZoom(state.zoom / 1.2);
     requestRender();
     return;
   }
@@ -322,7 +214,7 @@ function zoomAt(px, py, factor) {
   const sy = (canvas.height / 2 - py * dpr) / scale;
   const wx = sx / state.zoom + state.x;
   const wy = sy / state.zoom + state.y;
-  state.zoom *= factor;
+  state.zoom = clampZoom(state.zoom * factor);
   state.x = wx - sx / state.zoom;
   state.y = wy - sy / state.zoom;
   requestRender();
@@ -330,11 +222,9 @@ function zoomAt(px, py, factor) {
 
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
-  const f = Math.pow(1.2, -e.deltaY / 100);
-  zoomAt(e.clientX, e.clientY, f);
+  zoomAt(e.clientX, e.clientY, Math.pow(1.2, -e.deltaY / 100));
 }, { passive: false });
 
-// Drag to pan, pinch to zoom.
 const pointers = new Map();
 let pinch = null;
 
@@ -354,10 +244,8 @@ canvas.addEventListener('pointermove', (e) => {
   const dpr = canvas.width / canvas.clientWidth;
   const scale = canvas.height / 360;
   if (pointers.size === 1) {
-    const dx = e.clientX - p.x;
-    const dy = e.clientY - p.y;
-    state.x -= (dx * dpr) / scale / state.zoom;
-    state.y += (dy * dpr) / scale / state.zoom;
+    state.x -= ((e.clientX - p.x) * dpr) / scale / state.zoom;
+    state.y += ((e.clientY - p.y) * dpr) / scale / state.zoom;
     requestRender();
   }
   p.x = e.clientX;
@@ -365,9 +253,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (pointers.size === 2 && pinch) {
     const [a, b] = [...pointers.values()];
     const d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (d > 0 && pinch.dist > 0) {
-      zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, d / pinch.dist);
-    }
+    if (d > 0 && pinch.dist > 0) zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, d / pinch.dist);
     pinch.dist = d;
   }
 });
@@ -380,7 +266,6 @@ const endPointer = (e) => {
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
 
-// Touch bar: hold to repeat.
 for (const btn of document.querySelectorAll('.tbtn')) {
   let timer = null;
   const act = btn.dataset.act;
@@ -403,7 +288,6 @@ for (const btn of document.querySelectorAll('.tbtn')) {
 
 $('#save').addEventListener('click', savePng);
 $('#back').addEventListener('click', showMenu);
-
 window.addEventListener('resize', () => { if (mode === 'view') requestRender(); });
 
 // ---------- Screens ----------
@@ -440,8 +324,6 @@ function showViewer(set, view) {
 }
 
 function showMenu() {
-  current?.cancel();
-  current = null;
   keys.clear();
   mode = 'menu';
   viewer.hidden = true;
@@ -450,16 +332,19 @@ function showMenu() {
   renderCards();
 }
 
+// The GL canvas draws each thumbnail, then a 2D canvas on the card copies it.
 function renderCards() {
+  if (!renderer) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
   for (const card of document.querySelectorAll('.card')) {
-    const set = card.dataset.set;
     const c = card.querySelector('canvas');
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
     const cssW = c.clientWidth || 240;
     c.width = Math.round(cssW * dpr);
     c.height = Math.round(cssW * 0.75 * dpr);
-    const cctx = c.getContext('2d', { alpha: false });
-    renderInto(cctx, { set, x: 0, y: 0, zoom: 100 }, [{ step: 1, iter: iterationsFor(100) }]);
+    canvas.width = c.width;
+    canvas.height = c.height;
+    renderer.render({ set: card.dataset.set, x: 0, y: 0, zoom: 100, maxIter: iterationsFor(100) });
+    c.getContext('2d').drawImage(canvas, 0, 0);
   }
 }
 
@@ -469,9 +354,10 @@ for (const card of document.querySelectorAll('.card')) {
 
 // ---------- Boot ----------
 
-window.__fx = { state, showViewer, showMenu, renderCards, renderInto, getPool, iterationsFor };
+window.__fx = { state, showViewer, showMenu, renderCards, renderer, iterationsFor };
+
 if (readHash()) {
   showViewer(state.set);
-} else if (!location.search.includes('norender')) {
+} else {
   renderCards();
 }
