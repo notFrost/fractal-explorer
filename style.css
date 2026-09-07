@@ -250,6 +250,54 @@ body.viewing { overflow: hidden; }
 
 .hud-bookmarks:empty { display: none; }
 
+/* The coordinate and zoom lines open the go-to form. */
+.hud-edit {
+  text-align: left;
+  border-bottom: 1px dotted transparent;
+  cursor: text;
+}
+
+.hud-edit:hover { border-color: var(--dim); }
+
+.goto {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.goto[hidden] { display: none; }
+
+.goto-row {
+  display: grid;
+  grid-template-columns: 4ch 1fr;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.goto-in {
+  font: inherit;
+  color: var(--ink);
+  background: #000;
+  border: 1px solid var(--line);
+  padding: 0.3rem 0.45rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.goto-in:focus { outline: none; border-color: var(--magenta); }
+.goto-in::placeholder { color: var(--dim); }
+
+.goto-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.15rem;
+}
+
+.goto-error { color: var(--magenta); }
+
 .bookmark {
   color: var(--dim);
   border-bottom: 1px dotted var(--dim);

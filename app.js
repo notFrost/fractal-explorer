@@ -22,6 +22,14 @@ const hud = {
   status: $('#hud-status'),
   bookmarks: $('#bookmarks'),
 };
+const goto = {
+  form: $('#goto'),
+  x: $('#goto-x'),
+  y: $('#goto-y'),
+  zoom: $('#goto-zoom'),
+  any: $('#goto-any'),
+  error: $('#goto-error'),
+};
 
 let renderer = null;
 let mode = 'menu';
@@ -32,6 +40,8 @@ try {
   $('#gpu-error').hidden = false;
   $('#gpu-error').textContent = `${err.message} This explorer renders on the GPU and needs WebGL2.`;
 }
+
+const iterNow = () => iterationsFor(state.cam.lz, state.detail, state.set);
 
 function fmt(n) {
   const a = Math.abs(n);
@@ -46,7 +56,7 @@ function fmtZoom(lz) {
 }
 
 function clampLogZoom(lz) {
-  return Math.min(SETS[state.set].maxLogZoom, Math.max(MIN_LOG_ZOOM, lz));
+  return Math.max(MIN_LOG_ZOOM, lz);
 }
 
 // Deep zooms resolve hundreds of digits; the HUD shows the first 40 and keeps
@@ -62,9 +72,9 @@ function hudCoord() {
 
 function updateHud() {
   hud.c.textContent = hudCoord();
-  hud.c.title = state.cam.lz < 40 ? '' : `${state.cam.xString()}\n${state.cam.yString()}`;
+  hud.c.title = state.cam.lz < 40 ? 'Edit the coordinate (G)' : `${state.cam.xString()}\n${state.cam.yString()}`;
   hud.zoom.textContent = fmtZoom(state.cam.lz);
-  hud.iter.textContent = String(iterationsFor(state.cam.lz, state.detail));
+  hud.iter.textContent = String(iterNow());
   hud.detail.textContent = String(state.detail);
 }
 
@@ -129,7 +139,7 @@ function render() {
   if (mode !== 'view' || !renderer) return;
   fitCanvas();
   state.cam.setLogZoom(clampLogZoom(state.cam.lz));
-  const maxIter = iterationsFor(state.cam.lz, state.detail);
+  const maxIter = iterNow();
   const seq = ++frameSeq;
   const { strips } = renderer.begin({ set: state.set, cam: state.cam, maxIter });
   updateHud();
@@ -171,7 +181,7 @@ function savePng() {
   const scale = Math.min(2, cap / canvas.width, cap / canvas.height);
   const w = canvas.width;
   const h = canvas.height;
-  const maxIter = iterationsFor(state.cam.lz, state.detail);
+  const maxIter = iterNow();
   canvas.width = Math.round(w * scale);
   canvas.height = Math.round(h * scale);
   hud.status.textContent = `rendering ${canvas.width}×${canvas.height} for download…`;
@@ -192,6 +202,91 @@ function savePng() {
   frameSeq++;
   requestRender();
 }
+
+// ---------- Go to a location ----------
+
+// log2 zoom from "1e12", "2^1000", "10^301", "40,000×" or "1.5e3x". NaN if unreadable.
+function parseZoom(str) {
+  const s = String(str).trim().toLowerCase().replace(/[×x]$/, '').replace(/(\d),(?=\d{3}\b)/g, '$1').trim();
+  let m;
+  if ((m = /^2\^(-?[\d.]+)$/.exec(s))) return Number(m[1]);
+  if ((m = /^10\^(-?[\d.]+)$/.exec(s))) return Number(m[1]) * Math.log2(10);
+  const z = Number(s);
+  return z > 0 ? Math.log2(z) : NaN;
+}
+
+const NUM = String.raw`[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?`;
+const COMPLEX = new RegExp(`^(${NUM})\\s*([-+])\\s*(${NUM})\\s*i(?:\\s*@\\s*(.+))?$`, 'i');
+
+// Reads a share link or its hash, "x, y[, zoom]", or the HUD's "x ± yi [@ zoom]".
+// Returns { set?, xs, ys, lz? } with lz undefined when the text gives no zoom.
+function parseLocation(text) {
+  const t = String(text).trim().replace(/[−–]/g, '-');
+  let m = /(mandelbrot|collatz|webb)@([^,\s]+),([^,\s]+),([^,\s#]+)/i.exec(t);
+  if (m) return { set: m[1].toLowerCase(), xs: m[2], ys: m[3], lz: parseZoom(m[4]) };
+  m = COMPLEX.exec(t);
+  if (m) return { xs: m[1], ys: m[2] + m[3].replace(/^[-+]/, ''), lz: m[4] ? parseZoom(m[4]) : undefined };
+  const parts = t.split(/[,\s;]+/).filter(Boolean);
+  if (parts.length === 2 || parts.length === 3) {
+    return { xs: parts[0], ys: parts[1], lz: parts[2] ? parseZoom(parts[2]) : undefined };
+  }
+  return null;
+}
+
+// Moves the camera. Returns an error string, or null when it went.
+function goTo(loc) {
+  const lz = loc.lz === undefined ? state.cam.lz : loc.lz;
+  if (!Number.isFinite(lz)) return 'could not read the zoom';
+  const cam = Camera.fromDecimal(loc.xs, loc.ys, clampLogZoom(lz));
+  if (!cam) return 'could not read the coordinate';
+  if (loc.set && loc.set !== state.set) showViewer(loc.set);
+  state.cam = cam;
+  requestRender();
+  return null;
+}
+
+function openGoto() {
+  if (mode !== 'view') return;
+  keys.clear();
+  const c = state.cam;
+  goto.x.value = c.xString();
+  goto.y.value = c.yString();
+  goto.zoom.value = c.zoomString();
+  goto.any.value = '';
+  goto.error.textContent = '';
+  goto.form.hidden = false;
+  goto.any.focus();
+}
+
+function closeGoto() {
+  goto.form.hidden = true;
+  goto.any.blur();
+}
+
+goto.form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const any = goto.any.value.trim();
+  const loc = any ? parseLocation(any) : { xs: goto.x.value, ys: goto.y.value, lz: parseZoom(goto.zoom.value) };
+  const err = loc ? goTo(loc) : 'could not read that';
+  if (err) {
+    goto.error.textContent = err;
+    return;
+  }
+  closeGoto();
+});
+$('#goto-cancel').addEventListener('click', closeGoto);
+hud.c.addEventListener('click', openGoto);
+hud.zoom.addEventListener('click', openGoto);
+
+// A coordinate pasted anywhere in the viewer goes straight there.
+window.addEventListener('paste', (e) => {
+  if (mode !== 'view' || e.target.closest?.('input, textarea')) return;
+  const loc = parseLocation(e.clipboardData?.getData('text') || '');
+  if (!loc) return;
+  e.preventDefault();
+  const err = goTo(loc);
+  if (err) hud.status.textContent = `pasted text: ${err}`;
+});
 
 // ---------- Continuous motion (keys held) ----------
 
@@ -241,6 +336,10 @@ const STEP_LZ = Math.log2(1.2);
 
 window.addEventListener('keydown', (e) => {
   if (mode !== 'view') return;
+  if (e.target.closest?.('input, textarea')) {
+    if (e.key === 'Escape') closeGoto();
+    return;
+  }
   const k = e.key.toLowerCase();
   if (movementKeys.has(k)) {
     e.preventDefault();
@@ -258,10 +357,12 @@ window.addEventListener('keydown', (e) => {
     requestRender();
     return;
   }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (k === ' ') { e.preventDefault(); savePng(); }
-  if (k === 'escape') showMenu();
+  if (k === 'escape') (goto.form.hidden ? showMenu : closeGoto)();
   if (k === '[') changeDetail(-1);
   if (k === ']') changeDetail(1);
+  if (k === 'g') { e.preventDefault(); openGoto(); }
 });
 
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
@@ -349,6 +450,12 @@ window.addEventListener('resize', () => { if (mode === 'view') requestRender(); 
 
 // ---------- Screens ----------
 
+// Bookmarks hold numbers for shallow spots and decimal strings for deep ones.
+function bookmarkCamera(b) {
+  if (typeof b.x === 'string') return Camera.fromDecimal(b.x, b.y, parseZoom(b.zoom));
+  return new Camera(b.x, b.y, b.zoom);
+}
+
 function showViewer(set, view) {
   state.set = set;
   if (view) state.cam = new Camera(view.x, view.y, view.zoom);
@@ -356,6 +463,7 @@ function showViewer(set, view) {
   document.body.classList.add('viewing');
   menu.hidden = true;
   viewer.hidden = false;
+  closeGoto();
   $('#set-name').textContent = SETS[set].name;
 
   hud.bookmarks.replaceChildren(
@@ -363,9 +471,11 @@ function showViewer(set, view) {
       const el = document.createElement('button');
       el.type = 'button';
       el.className = 'bookmark';
-      el.textContent = `${fmt(b.x)}${b.y < 0 ? ' − ' : ' + '}${fmt(Math.abs(b.y))}i @ ${fmtZoom(Math.log2(b.zoom))}`;
+      const x = Number(b.x);
+      const y = Number(b.y);
+      el.textContent = `${fmt(x)}${y < 0 ? ' − ' : ' + '}${fmt(Math.abs(y))}i @ ${fmtZoom(parseZoom(b.zoom))}`;
       el.addEventListener('click', () => {
-        state.cam = new Camera(b.x, b.y, b.zoom);
+        state.cam = bookmarkCamera(b);
         requestRender();
       });
       return el;
@@ -399,7 +509,7 @@ function renderCards() {
     c.height = Math.round(cssW * 0.75 * dpr);
     canvas.width = c.width;
     canvas.height = c.height;
-    renderer.renderAll({ set: card.dataset.set, cam: home, maxIter: iterationsFor(home.lz) });
+    renderer.renderAll({ set: card.dataset.set, cam: home, maxIter: iterationsFor(home.lz, 1, card.dataset.set) });
     c.getContext('2d').drawImage(canvas, 0, 0);
   }
 }
@@ -410,7 +520,7 @@ for (const card of document.querySelectorAll('.card')) {
 
 // ---------- Boot ----------
 
-window.__fx = { state, showViewer, showMenu, renderCards, render, renderer, iterationsFor, Camera };
+window.__fx = { state, showViewer, showMenu, renderCards, render, renderer, iterationsFor, Camera, parseLocation, parseZoom, goTo };
 
 if (readHash()) {
   showViewer(state.set);
