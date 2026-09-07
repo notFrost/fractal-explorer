@@ -1,8 +1,9 @@
 # Fractal Explorer
 
 A web port of a PenguinMod project (`FractalExplorer.pmp`). Three escape-time
-sets drawn on the GPU with WebGL2 fragment shaders. The original's camera
-model, pen colours, and controls carry over; the CPU pen-plotting does not.
+sets drawn on the GPU with WebGL2 fragment shaders. The Mandelbrot set zooms
+without a precision limit. The original's camera model, pen colours, and
+controls carry over; the CPU pen-plotting does not.
 
 ## Run
 
@@ -18,71 +19,75 @@ not load from `file://`. Any static server works. Needs a browser with WebGL2.
 | Action | Keyboard | Mouse / touch |
 | --- | --- | --- |
 | Pan | W A S D or arrows, Shift doubles speed | drag |
-| Zoom | E in, Q out | wheel, pinch, on-screen buttons |
-| Detail (iteration multiplier ×1 ×2 ×4 ×8) | `[` and `]` | on-screen buttons |
-| Save PNG at twice screen size | Space | Save PNG button |
+| Zoom | E in, Q out | wheel, pinch |
+| Iterations (×1 ×2 ×4 ×8) | `[` and `]` | the two round buttons |
+| Save PNG at twice screen size | Space | the camera button |
 | Back to menu | Esc | Menu button |
 
-The URL hash stores the set, centre, and zoom, so a view can be bookmarked or
-shared.
-
-## Touch controls and the installable app
-
-The touch layout follows the original's mobile mode: zoom-in and the
-screenshot button on the left edge, zoom-out on the right edge, and a pan
-joystick bottom-right. Buttons repeat while held, the joystick pans at a rate
-proportional to its deflection, and drag-to-pan and pinch-to-zoom work on the
-canvas as well. The layout turns on automatically for coarse pointers and can
-be toggled with the Touch button in the top bar. The choice is remembered.
-
-`manifest.webmanifest` and `sw.js` make it a Progressive Web App. Install it
-from the browser menu on a phone or desktop. The service worker caches the
-app shell network-first, so edits show up on reload and the explorer keeps
-working offline once it has loaded. Icons are `icon.svg` and two PNGs
-rasterised from it.
+The URL hash stores the set, centre, and zoom with as many digits as the zoom
+needs, so any view can be bookmarked or shared.
 
 ## Rendering
 
-One fullscreen triangle, one draw call per frame, one fragment shader per set.
-Every input event redraws immediately. There are no progressive passes.
+One fullscreen triangle, one fragment shader per set. Cheap frames are a
+single draw call. Expensive frames are drawn in horizontal strips across
+successive animation frames so no draw call runs long enough to trip the GPU
+watchdog. Every input event starts a new frame and cancels the old one.
 
-**Mandelbrot** uses perturbation. The CPU computes the orbit of the screen
-centre in double precision and uploads it as a float texture. Each pixel
-iterates only its offset from that orbit in float32, and rebases to the start
-of the reference whenever its own orbit passes closer to the origin than the
-offset (Zhuoran's method). That removes the usual float32 zoom ceiling. The
-limit becomes the double precision of the centre itself, about 10^15.
+### Mandelbrot precision tiers
+
+The camera centre is a fixed-point BigInt whose bit width grows with zoom,
+`ceil(log2 zoom) + 64`. Pixels never see the centre. Each pixel iterates only
+its offset from a reference orbit (perturbation), and rebases to the start of
+the reference whenever its own orbit passes closer to the origin than the
+offset (Zhuoran's method). The reference is cached and reused while the camera
+stays within two screens of it and the zoom stays within 2^64 of when it was
+computed, so panning at depth is free.
+
+| Zoom | Reference orbit | Pixel delta |
+| --- | --- | --- |
+| below 2^40 (about 10^12) | double | float32 |
+| 2^40 to 2^90 (about 10^27) | BigInt fixed point | float32 |
+| above 2^90 | BigInt fixed point | float32 mantissa + int exponent |
+
+The floatexp tier exists because pixel deltas fall below float32's smallest
+normal number, around 10^-38, while the reference values stay in ordinary
+range. The shader carries each delta as `m × 2^e`, normalised so the mantissa
+stays in [0.5, 1), built from `floatBitsToInt` and `intBitsToFloat` since
+GLSL ES 3.00 lacks `frexp` and `ldexp`.
+
+There is no upper zoom limit in the code. In practice the cost grows with
+depth: the iteration budget is `30 × log2 zoom`, capped at 50 000 (×8 with
+the detail buttons, capped at 100 000), and the reference orbit costs about
+90 ms at 10^300. At 10^300 a 1280×800 frame is roughly 80 strips and under a
+second on an RTX 2060.
 
 **Webb** and **Collatz** iterate directly in float32 and are capped at 10^6
-zoom, where a pixel still spans tens of float ulps. Collatz has no perturbation
-form because its parity test is a floor, and its values overflow within a few
-dozen steps regardless.
-
-**Iterations** grow with zoom depth, `clamp(100 × log10(zoom), 200, 4000)`,
-times the detail multiplier, capped at 8000. The cap keeps a single draw call
-under typical GPU watchdog timeouts.
+zoom. Collatz has no perturbation form because its parity test is a floor.
+Webb's two-term recurrence can be perturbed but not rebased, which produces
+glitches near deep minibrots, so it stays capped.
 
 **Colour** is the original pen mapping: hue `(t + 90) mod 100` on a 0..100
 wheel, brightness `t × 5` clamped, inside points black.
 
-**Timing** in the HUD comes from `EXT_disjoint_timer_query_webgl2` when the
-browser exposes it. Otherwise only the resolution is shown.
+**Timing** in the HUD sums `EXT_disjoint_timer_query_webgl2` queries across
+the strips of one frame. `ref` is the CPU time for the reference orbit when it
+had to be recomputed.
 
-**Per-frame allocation is zero.** The reference orbit is written into one
-preallocated buffer and uploaded with `texSubImage2D` into a texture sized once
-for the iteration cap. Only one timer query is ever live. The URL hash is
-written after input settles rather than every frame. A soak of 4500 frames
-across sets holds the JS heap flat at 2 MB.
+## Installable app
+
+`manifest.webmanifest` and `sw.js` make it a Progressive Web App. Install it
+from the browser menu on a phone or desktop. The service worker caches the
+app shell network-first, so edits show up on reload and the explorer keeps
+working offline once it has loaded.
 
 ## Ported from the original
 
 - Coordinates: `c = pixel / zoom + camera`, with the canvas height standing in
   for the 480×360 stage's 360 pixels.
 - The two camera presets left as loose scripts in the Render sprite are
-  bookmarks under the Mandelbrot HUD, plus one deep-zoom bookmark to show what
-  perturbation buys.
-- Main menu with a hover wobble, mobile zoom buttons, PNG download.
+  bookmarks under the Mandelbrot HUD, plus one at 10^12.
+- Main menu with a hover wobble, PNG download, iteration detail control.
 
-Not ported: the on-screen joystick (drag replaces it), the mobile-mode flag
-(touch controls show on coarse pointers), and Scratch's base-10 log and
-NaN-to-0 quirks in the smooth colouring.
+Not ported: the joystick and edge buttons of the original's mobile mode, and
+Scratch's base-10 log and NaN-to-0 quirks in the smooth colouring.

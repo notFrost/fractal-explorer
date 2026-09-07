@@ -59,8 +59,6 @@
     <div class="topbar">
       <button id="back" class="btn" type="button" title="Back to menu (Esc)">← Menu</button>
       <span id="set-name" class="set-name"></span>
-      <button id="touch-toggle" class="btn" type="button" aria-pressed="false" title="Show touch controls">Touch</button>
-      <button id="save" class="btn btn-accent" type="button" title="Render and download PNG (Space)">Save PNG</button>
     </div>
 
     <aside class="hud" aria-live="polite">
@@ -71,22 +69,12 @@
       <div class="hud-row hud-bookmarks" id="bookmarks"></div>
     </aside>
 
-    <!-- Touch layout after the original's mobile mode -->
-    <div class="touch-ui touch-left">
-      <button class="tbtn" data-act="zoom-in" type="button" aria-label="Zoom in">+</button>
-      <button class="tbtn" data-act="save" type="button" aria-label="Save PNG">
+    <div class="controls" aria-label="Controls">
+      <button id="detail-down" class="cbtn" type="button" title="Fewer iterations ( [ )" aria-label="Fewer iterations">◔</button>
+      <button id="detail-up" class="cbtn" type="button" title="More iterations ( ] )" aria-label="More iterations">●</button>
+      <button id="save" class="cbtn cbtn-accent" type="button" title="Save PNG (Space)" aria-label="Save PNG">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>
       </button>
-    </div>
-    <div class="touch-ui touch-right">
-      <button class="tbtn" data-act="zoom-out" type="button" aria-label="Zoom out">−</button>
-    </div>
-    <div class="touch-ui touch-detail">
-      <button class="tbtn tbtn-small" data-act="detail-down" type="button" aria-label="Less detail">◔</button>
-      <button class="tbtn tbtn-small" data-act="detail-up" type="button" aria-label="More detail">●</button>
-    </div>
-    <div class="touch-ui joystick" id="joystick" aria-label="Pan joystick">
-      <div class="stick"></div>
     </div>
 
     <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · [ ] detail · Space saves</p>

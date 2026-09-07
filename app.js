@@ -1,13 +1,12 @@
-import { SETS, MIN_ZOOM, iterationsFor } from './fractals.js';
+import { SETS, MIN_LOG_ZOOM, iterationsFor } from './fractals.js';
+import { Camera } from './precision.js';
 import { Renderer } from './gpu.js';
 
 // ---------- State ----------
 
 const state = {
   set: 'mandelbrot',
-  x: 0,
-  y: 0,
-  zoom: 100,
+  cam: new Camera(0, 0, 100),
   detail: 1,
 };
 
@@ -40,20 +39,32 @@ function fmt(n) {
   return n.toFixed(6).replace(/\.?0+$/, '') || '0';
 }
 
-function fmtZoom(z) {
-  if (z >= 1e5) return z.toExponential(2) + '×';
-  return Math.round(z).toLocaleString() + '×';
+function fmtZoom(lz) {
+  if (lz < Math.log2(1e5)) return Math.round(2 ** lz).toLocaleString() + '×';
+  if (lz < 1000) return (2 ** lz).toExponential(2) + '×';
+  return `10^${Math.round(lz * 0.30103)}×`;
 }
 
-function clampZoom(z) {
-  return Math.min(SETS[state.set].maxZoom, Math.max(MIN_ZOOM, z));
+function clampLogZoom(lz) {
+  return Math.min(SETS[state.set].maxLogZoom, Math.max(MIN_LOG_ZOOM, lz));
+}
+
+// Deep zooms resolve hundreds of digits; the HUD shows the first 40 and keeps
+// the full value in the tooltip and the URL.
+function hudCoord() {
+  const cam = state.cam;
+  if (cam.lz < 40) return `${fmt(cam.xDouble())} ${cam.yDouble() < 0 ? '−' : '+'} ${fmt(Math.abs(cam.yDouble()))}i`;
+  const cut = (s) => (s.length > 42 ? s.slice(0, 42) + '…' : s);
+  const xs = cam.xString();
+  const ys = cam.yString();
+  return `${cut(xs)} ${ys.startsWith('-') ? '−' : '+'} ${cut(ys.replace(/^-/, ''))}i`;
 }
 
 function updateHud() {
-  const sign = state.y < 0 ? '−' : '+';
-  hud.c.textContent = `${fmt(state.x)} ${sign} ${fmt(Math.abs(state.y))}i`;
-  hud.zoom.textContent = fmtZoom(state.zoom);
-  hud.iter.textContent = String(iterationsFor(state.zoom, state.detail));
+  hud.c.textContent = hudCoord();
+  hud.c.title = state.cam.lz < 40 ? '' : `${state.cam.xString()}\n${state.cam.yString()}`;
+  hud.zoom.textContent = fmtZoom(state.cam.lz);
+  hud.iter.textContent = String(iterationsFor(state.cam.lz, state.detail));
   hud.detail.textContent = String(state.detail);
 }
 
@@ -63,18 +74,19 @@ function scheduleHash() {
   clearTimeout(hashTimer);
   hashTimer = setTimeout(() => {
     if (mode !== 'view') return;
-    history.replaceState(null, '', `#${state.set}@${state.x},${state.y},${state.zoom}`);
+    const c = state.cam;
+    history.replaceState(null, '', `#${state.set}@${c.xString()},${c.yString()},${c.zoomString()}`);
   }, 300);
 }
 
 function readHash() {
-  const m = location.hash.match(/^#(\w+)@([-\d.e+]+),([-\d.e+]+),([\d.e+]+)$/);
+  const m = location.hash.match(/^#(\w+)@([^,]+),([^,]+),([^,]+)$/);
   if (!m || !SETS[m[1]]) return false;
+  const cam = Camera.fromStrings(m[2], m[3], m[4]);
+  if (!cam) return false;
   state.set = m[1];
-  state.x = Number(m[2]);
-  state.y = Number(m[3]);
-  state.zoom = Number(m[4]);
-  return Number.isFinite(state.x) && Number.isFinite(state.y) && state.zoom > 0;
+  state.cam = cam;
+  return true;
 }
 
 // ---------- Rendering ----------
@@ -90,7 +102,7 @@ function fitCanvas() {
 }
 
 let renderQueued = false;
-let statusSeq = 0;
+let frameSeq = 0;
 
 function requestRender() {
   if (renderQueued) return;
@@ -101,20 +113,55 @@ function requestRender() {
   }, 0);
 }
 
+function tierLabel() {
+  switch (renderer.tier) {
+    case 'double': return 'double';
+    case 'big': return `${renderer.ref.bits}-bit`;
+    case 'fe': return `${renderer.ref.bits}-bit + floatexp`;
+    default: return 'float32';
+  }
+}
+
+// One frame. Cheap frames are one draw call; deep frames are drawn in strips
+// across successive animation frames so no draw call runs long enough to
+// trip the GPU watchdog. A newer frame cancels the strips of the old one.
 function render() {
   if (mode !== 'view' || !renderer) return;
   fitCanvas();
-  state.zoom = clampZoom(state.zoom);
-  renderer.render({ ...state, maxIter: iterationsFor(state.zoom, state.detail) });
+  state.cam.setLogZoom(clampLogZoom(state.cam.lz));
+  const maxIter = iterationsFor(state.cam.lz, state.detail);
+  const seq = ++frameSeq;
+  const { strips } = renderer.begin({ set: state.set, cam: state.cam, maxIter });
   updateHud();
   scheduleHash();
+  const size = `${canvas.width}×${canvas.height}`;
+  const refNote = renderer.refCpuMs > 1 ? ` · ref ${Math.round(renderer.refCpuMs)} ms` : '';
 
-  const seq = ++statusSeq;
-  hud.status.textContent = `${canvas.width}×${canvas.height} · GPU`;
-  renderer.gpuTime().then((ms) => {
-    if (seq !== statusSeq || ms === null) return;
-    hud.status.textContent = `${canvas.width}×${canvas.height} · GPU ${ms < 1 ? ms.toFixed(2) : ms.toFixed(1)} ms`;
-  });
+  const label = tierLabel();
+  const stripNote = strips > 1 ? ` · ${strips} strips` : '';
+  const finish = () => {
+    hud.status.textContent = `${size} · ${label}${stripNote}${refNote}`;
+    renderer.gpuTime().then((ms) => {
+      if (seq !== frameSeq || ms === null) return;
+      hud.status.textContent = `${size} · ${label} · GPU ${ms < 1 ? ms.toFixed(2) : ms.toFixed(1)} ms${stripNote}${refNote}`;
+    });
+  };
+
+  let i = 0;
+  const step = () => {
+    if (seq !== frameSeq || mode !== 'view') return;
+    // Uniforms may have been replaced by a thumbnail or export; re-issue them.
+    if (i > 0) renderer.begin({ set: state.set, cam: state.cam, maxIter }, false);
+    renderer.drawStrip(i, strips);
+    i++;
+    if (i < strips) {
+      hud.status.textContent = `${size} · ${label} · strip ${i}/${strips}${refNote}`;
+      requestAnimationFrame(step);
+    } else {
+      finish();
+    }
+  };
+  step();
 }
 
 // Render at twice the screen size, download, then restore the view.
@@ -124,11 +171,13 @@ function savePng() {
   const scale = Math.min(2, cap / canvas.width, cap / canvas.height);
   const w = canvas.width;
   const h = canvas.height;
+  const maxIter = iterationsFor(state.cam.lz, state.detail);
   canvas.width = Math.round(w * scale);
   canvas.height = Math.round(h * scale);
-  renderer.render({ ...state, maxIter: iterationsFor(state.zoom, state.detail) });
-  const name = `${state.set}_${fmt(state.x)}_${fmt(state.y)}_${Math.round(state.zoom)}x.png`;
   hud.status.textContent = `rendering ${canvas.width}×${canvas.height} for download…`;
+  renderer.renderAll({ set: state.set, cam: state.cam, maxIter });
+  const c = state.cam;
+  const name = `${state.set}_${c.xString().slice(0, 24)}_${c.yString().slice(0, 24)}_${c.zoomString()}x.png`;
   canvas.toBlob((blob) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -140,19 +189,15 @@ function savePng() {
   }, 'image/png');
   canvas.width = w;
   canvas.height = h;
-  renderer.render({ ...state, maxIter: iterationsFor(state.zoom, state.detail) });
+  frameSeq++;
+  requestRender();
 }
 
-// ---------- Continuous motion (keys held, joystick deflected) ----------
+// ---------- Continuous motion (keys held) ----------
 
 const keys = new Set();
-const joy = { x: 0, y: 0, active: false };
 let motionLoop = false;
 let lastTick = 0;
-
-function motionWanted() {
-  return keys.size > 0 || joy.active;
-}
 
 function startMotion() {
   if (motionLoop) return;
@@ -162,7 +207,7 @@ function startMotion() {
 }
 
 function tick(now) {
-  if (mode !== 'view' || !motionWanted()) {
+  if (mode !== 'view' || !keys.size) {
     motionLoop = false;
     return;
   }
@@ -170,24 +215,20 @@ function tick(now) {
   lastTick = now;
   let moved = false;
 
-  // Stage pixels per second divided by zoom, like the original's 10 px per loop.
+  // Stage pixels per second, like the original's 10 px per loop.
   const fast = keys.has('shift') ? 2 : 1;
-  const pan = (300 * fast * dt) / state.zoom;
-  if (keys.has('a') || keys.has('arrowleft')) { state.x -= pan; moved = true; }
-  if (keys.has('d') || keys.has('arrowright')) { state.x += pan; moved = true; }
-  if (keys.has('w') || keys.has('arrowup')) { state.y += pan; moved = true; }
-  if (keys.has('s') || keys.has('arrowdown')) { state.y -= pan; moved = true; }
+  const pan = 300 * fast * dt;
+  let dx = 0;
+  let dy = 0;
+  if (keys.has('a') || keys.has('arrowleft')) dx -= pan;
+  if (keys.has('d') || keys.has('arrowright')) dx += pan;
+  if (keys.has('w') || keys.has('arrowup')) dy += pan;
+  if (keys.has('s') || keys.has('arrowdown')) dy -= pan;
+  if (dx || dy) { state.cam.pan(dx, dy); moved = true; }
 
-  const zf = Math.pow(4, dt);
-  if (keys.has('e')) { state.zoom = clampZoom(state.zoom * zf); moved = true; }
-  if (keys.has('q')) { state.zoom = clampZoom(state.zoom / zf); moved = true; }
-
-  // Joystick: the original moved the camera by stick offset / (zoom × 3) per loop.
-  if (joy.active && (joy.x || joy.y)) {
-    state.x += (joy.x * 240 * dt) / state.zoom;
-    state.y += (joy.y * 240 * dt) / state.zoom;
-    moved = true;
-  }
+  const dlz = 2 * dt; // 4× per second
+  if (keys.has('e')) { state.cam.setLogZoom(clampLogZoom(state.cam.lz + dlz)); moved = true; }
+  if (keys.has('q')) { state.cam.setLogZoom(clampLogZoom(state.cam.lz - dlz)); moved = true; }
 
   if (moved) requestRender();
   requestAnimationFrame(tick);
@@ -196,6 +237,7 @@ function tick(now) {
 // ---------- Keyboard ----------
 
 const movementKeys = new Set(['a', 'd', 'w', 's', 'q', 'e', 'shift', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown']);
+const STEP_LZ = Math.log2(1.2);
 
 window.addEventListener('keydown', (e) => {
   if (mode !== 'view') return;
@@ -206,14 +248,13 @@ window.addEventListener('keydown', (e) => {
     keys.add(k);
     startMotion();
     // One discrete step on the tap; holding continues in tick().
-    const fast = e.shiftKey ? 2 : 1;
-    const pan = (10 * fast) / state.zoom;
-    if (k === 'a' || k === 'arrowleft') state.x -= pan;
-    if (k === 'd' || k === 'arrowright') state.x += pan;
-    if (k === 'w' || k === 'arrowup') state.y += pan;
-    if (k === 's' || k === 'arrowdown') state.y -= pan;
-    if (k === 'e') state.zoom = clampZoom(state.zoom * 1.2);
-    if (k === 'q') state.zoom = clampZoom(state.zoom / 1.2);
+    const pan = 10 * (e.shiftKey ? 2 : 1);
+    if (k === 'a' || k === 'arrowleft') state.cam.pan(-pan, 0);
+    if (k === 'd' || k === 'arrowright') state.cam.pan(pan, 0);
+    if (k === 'w' || k === 'arrowup') state.cam.pan(0, pan);
+    if (k === 's' || k === 'arrowdown') state.cam.pan(0, -pan);
+    if (k === 'e') state.cam.setLogZoom(clampLogZoom(state.cam.lz + STEP_LZ));
+    if (k === 'q') state.cam.setLogZoom(clampLogZoom(state.cam.lz - STEP_LZ));
     requestRender();
     return;
   }
@@ -235,22 +276,22 @@ function changeDetail(dir) {
 
 // ---------- Pointer: drag, wheel, pinch ----------
 
-// Zoom keeping the world point under (px, py) fixed.
-function zoomAt(px, py, factor) {
+// Stage-pixel offset of a client point from the canvas centre.
+function stageOffset(px, py) {
   const dpr = canvas.width / canvas.clientWidth;
   const scale = canvas.height / 360;
-  const sx = (px * dpr - canvas.width / 2) / scale;
-  const sy = (canvas.height / 2 - py * dpr) / scale;
-  const wx = sx / state.zoom + state.x;
-  const wy = sy / state.zoom + state.y;
-  state.zoom = clampZoom(state.zoom * factor);
-  state.x = wx - sx / state.zoom;
-  state.y = wy - sy / state.zoom;
-  requestRender();
+  return {
+    sx: (px * dpr - canvas.width / 2) / scale,
+    sy: (canvas.height / 2 - py * dpr) / scale,
+  };
 }
 
-function zoomCentre(factor) {
-  zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, factor);
+// Zoom keeping the world point under (px, py) fixed.
+function zoomAt(px, py, factor) {
+  const { sx, sy } = stageOffset(px, py);
+  const target = clampLogZoom(state.cam.lz + Math.log2(factor));
+  state.cam.zoomAt(sx, sy, target - state.cam.lz);
+  requestRender();
 }
 
 canvas.addEventListener('wheel', (e) => {
@@ -277,8 +318,7 @@ canvas.addEventListener('pointermove', (e) => {
   const dpr = canvas.width / canvas.clientWidth;
   const scale = canvas.height / 360;
   if (pointers.size === 1) {
-    state.x -= ((e.clientX - p.x) * dpr) / scale / state.zoom;
-    state.y += ((e.clientY - p.y) * dpr) / scale / state.zoom;
+    state.cam.pan(-((e.clientX - p.x) * dpr) / scale, ((e.clientY - p.y) * dpr) / scale);
     requestRender();
   }
   p.x = e.clientX;
@@ -299,92 +339,10 @@ const endPointer = (e) => {
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
 
-// ---------- Touch controls, after the original's mobile mode ----------
-// Joystick bottom-right; zoom-in on the left edge with the screenshot button
-// under it; zoom-out on the right edge. Buttons repeat while held.
+// ---------- Buttons ----------
 
-const touchToggle = $('#touch-toggle');
-
-function setTouch(on) {
-  document.body.classList.toggle('touch', on);
-  touchToggle.setAttribute('aria-pressed', String(on));
-  localStorage.setItem('touch', on ? '1' : '0');
-}
-
-{
-  const saved = localStorage.getItem('touch');
-  const coarse = window.matchMedia('(pointer: coarse)').matches;
-  setTouch(saved === null ? coarse : saved === '1');
-}
-
-touchToggle.addEventListener('click', () => setTouch(!document.body.classList.contains('touch')));
-
-for (const btn of document.querySelectorAll('.tbtn[data-act]')) {
-  const act = btn.dataset.act;
-  let timer = 0;
-  const fire = () => {
-    if (act === 'zoom-in') zoomCentre(1.1);
-    if (act === 'zoom-out') zoomCentre(1 / 1.1);
-  };
-  const stop = () => { clearInterval(timer); timer = 0; };
-  btn.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    if (act === 'save') return savePng();
-    if (act === 'detail-up') return changeDetail(1);
-    if (act === 'detail-down') return changeDetail(-1);
-    fire();
-    stop();
-    timer = setInterval(fire, 60);
-  });
-  btn.addEventListener('pointerup', stop);
-  btn.addEventListener('pointercancel', stop);
-  btn.addEventListener('pointerleave', stop);
-  btn.addEventListener('contextmenu', (e) => e.preventDefault());
-}
-
-const joystick = $('#joystick');
-const stick = joystick.querySelector('.stick');
-let joyPointer = null;
-
-function moveStick(e) {
-  const r = joystick.getBoundingClientRect();
-  const max = r.width * 0.3;
-  let dx = e.clientX - (r.left + r.width / 2);
-  let dy = e.clientY - (r.top + r.height / 2);
-  const len = Math.hypot(dx, dy);
-  if (len > max) {
-    dx *= max / len;
-    dy *= max / len;
-  }
-  stick.style.transform = `translate(${dx}px, ${dy}px)`;
-  joy.x = dx / max;
-  joy.y = -dy / max;
-}
-
-joystick.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  try { joystick.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
-  joyPointer = e.pointerId;
-  joy.active = true;
-  moveStick(e);
-  startMotion();
-});
-
-joystick.addEventListener('pointermove', (e) => {
-  if (e.pointerId === joyPointer) moveStick(e);
-});
-
-const releaseStick = (e) => {
-  if (e.pointerId !== joyPointer) return;
-  joyPointer = null;
-  joy.active = false;
-  joy.x = 0;
-  joy.y = 0;
-  stick.style.transform = '';
-};
-joystick.addEventListener('pointerup', releaseStick);
-joystick.addEventListener('pointercancel', releaseStick);
-
+$('#detail-down').addEventListener('click', () => changeDetail(-1));
+$('#detail-up').addEventListener('click', () => changeDetail(1));
 $('#save').addEventListener('click', savePng);
 $('#back').addEventListener('click', showMenu);
 window.addEventListener('resize', () => { if (mode === 'view') requestRender(); });
@@ -393,15 +351,11 @@ window.addEventListener('resize', () => { if (mode === 'view') requestRender(); 
 
 function showViewer(set, view) {
   state.set = set;
-  if (view) {
-    state.x = view.x;
-    state.y = view.y;
-    state.zoom = view.zoom;
-  }
+  if (view) state.cam = new Camera(view.x, view.y, view.zoom);
   mode = 'view';
+  document.body.classList.add('viewing');
   menu.hidden = true;
   viewer.hidden = false;
-  document.body.classList.add('viewing');
   $('#set-name').textContent = SETS[set].name;
 
   hud.bookmarks.replaceChildren(
@@ -409,11 +363,9 @@ function showViewer(set, view) {
       const el = document.createElement('button');
       el.type = 'button';
       el.className = 'bookmark';
-      el.textContent = `${fmt(b.x)}${b.y < 0 ? ' − ' : ' + '}${fmt(Math.abs(b.y))}i @ ${fmtZoom(b.zoom)}`;
+      el.textContent = `${fmt(b.x)}${b.y < 0 ? ' − ' : ' + '}${fmt(Math.abs(b.y))}i @ ${fmtZoom(Math.log2(b.zoom))}`;
       el.addEventListener('click', () => {
-        state.x = b.x;
-        state.y = b.y;
-        state.zoom = b.zoom;
+        state.cam = new Camera(b.x, b.y, b.zoom);
         requestRender();
       });
       return el;
@@ -425,11 +377,11 @@ function showViewer(set, view) {
 
 function showMenu() {
   keys.clear();
-  joy.active = false;
+  frameSeq++;
   mode = 'menu';
+  document.body.classList.remove('viewing');
   viewer.hidden = true;
   menu.hidden = false;
-  document.body.classList.remove('viewing');
   clearTimeout(hashTimer);
   history.replaceState(null, '', location.pathname);
   renderCards();
@@ -439,6 +391,7 @@ function showMenu() {
 function renderCards() {
   if (!renderer) return;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const home = new Camera(0, 0, 100);
   for (const card of document.querySelectorAll('.card')) {
     const c = card.querySelector('canvas');
     const cssW = c.clientWidth || 240;
@@ -446,7 +399,7 @@ function renderCards() {
     c.height = Math.round(cssW * 0.75 * dpr);
     canvas.width = c.width;
     canvas.height = c.height;
-    renderer.render({ set: card.dataset.set, x: 0, y: 0, zoom: 100, maxIter: iterationsFor(100) });
+    renderer.renderAll({ set: card.dataset.set, cam: home, maxIter: iterationsFor(home.lz) });
     c.getContext('2d').drawImage(canvas, 0, 0);
   }
 }
@@ -457,7 +410,7 @@ for (const card of document.querySelectorAll('.card')) {
 
 // ---------- Boot ----------
 
-window.__fx = { state, showViewer, showMenu, renderCards, render, renderer, iterationsFor, joy };
+window.__fx = { state, showViewer, showMenu, renderCards, render, renderer, iterationsFor, Camera };
 
 if (readHash()) {
   showViewer(state.set);
