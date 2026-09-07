@@ -1,9 +1,15 @@
 # Fractal Explorer
 
+**[Live demo](https://fractal-explorer-six.vercel.app)**
+
 A web port of a PenguinMod project (`FractalExplorer.pmp`). Three escape-time
 sets drawn on the GPU with WebGL2 fragment shaders. The Mandelbrot set zooms
 without a precision limit. The original's camera model, pen colours, and
 controls carry over; the CPU pen-plotting does not.
+
+Try [10^301 zoom](https://fractal-explorer-six.vercel.app/#mandelbrot@0,1,2^1000.000)
+to see the arbitrary-precision path working: a 1128-bit reference orbit, drawn
+in 77 strips.
 
 ## Run
 
