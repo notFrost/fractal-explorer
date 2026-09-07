@@ -62,11 +62,23 @@
     </div>
 
     <aside class="hud" aria-live="polite">
-      <div class="hud-row hud-c"><span class="hud-k">c</span> <span id="hud-c">0 + 0i</span></div>
-      <div class="hud-row"><span class="hud-k">zoom</span> <span id="hud-zoom">100×</span></div>
+      <div class="hud-row hud-c"><span class="hud-k">c</span> <button id="hud-c" class="hud-edit" type="button" title="Edit the coordinate (G)">0 + 0i</button></div>
+      <div class="hud-row"><span class="hud-k">zoom</span> <button id="hud-zoom" class="hud-edit" type="button" title="Edit the zoom (G)">100×</button></div>
       <div class="hud-row"><span class="hud-k">iter</span> <span id="hud-iter">200</span> <span class="hud-dim">detail ×<span id="hud-detail">1</span></span></div>
       <div class="hud-row hud-dim"><span id="hud-status">idle</span></div>
       <div class="hud-row hud-bookmarks" id="bookmarks"></div>
+
+      <form id="goto" class="goto" hidden autocomplete="off">
+        <label class="goto-row"><span class="hud-k">re</span><input id="goto-x" class="goto-in" type="text" spellcheck="false" /></label>
+        <label class="goto-row"><span class="hud-k">im</span><input id="goto-y" class="goto-in" type="text" spellcheck="false" /></label>
+        <label class="goto-row"><span class="hud-k">zoom</span><input id="goto-zoom" class="goto-in" type="text" spellcheck="false" placeholder="1e12, 2^1000, 10^301" /></label>
+        <label class="goto-row"><span class="hud-k">any</span><input id="goto-any" class="goto-in" type="text" spellcheck="false" placeholder="paste a link, “x, y, zoom” or “x + yi @ zoom”" /></label>
+        <div class="goto-actions">
+          <button type="submit" class="btn btn-accent">Go</button>
+          <button type="button" id="goto-cancel" class="btn">Cancel</button>
+          <span id="goto-error" class="goto-error" role="alert"></span>
+        </div>
+      </form>
     </aside>
 
     <div class="controls" aria-label="Controls">
@@ -77,7 +89,7 @@
       </button>
     </div>
 
-    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · [ ] detail · Space saves</p>
+    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · [ ] detail · G or paste to go somewhere · Space saves</p>
   </section>
 
   <script type="module" src="app.js"></script>

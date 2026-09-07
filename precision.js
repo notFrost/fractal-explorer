@@ -77,6 +77,11 @@ export class Camera {
       if (!(z > 0)) return null;
       lz = Math.log2(z);
     }
+    return Camera.fromDecimal(xs, ys, lz);
+  }
+
+  // Centre from decimal strings at a given log2 zoom. Null if either fails to parse.
+  static fromDecimal(xs, ys, lz) {
     if (!Number.isFinite(lz)) return null;
     const bits = bitsFor(lz);
     const x = parseDecimal(xs, bits);
@@ -156,9 +161,15 @@ export class Camera {
   }
 }
 
-// ---------- Mandelbrot reference orbit ----------
+// ---------- Reference orbits ----------
+//
+// Every orbit writes one RGBA32F texel per step into `out` (four floats). The
+// first two channels are always Z_n; what the other two hold depends on the set.
+// `cont` resumes an unescaped orbit where a previous call stopped.
 
-// Double-precision orbit for shallow zooms. Writes (re, im) pairs into out.
+const STRIDE = 4;
+
+// Mandelbrot in double precision for shallow zooms. Texel: (Z, 0, 0).
 export function referenceOrbitDouble(cx, cy, maxIter, out) {
   let zr = 0;
   let zi = 0;
@@ -169,15 +180,15 @@ export function referenceOrbitDouble(cx, cy, maxIter, out) {
     const nr = zr * zr - zi * zi + cx;
     zi = 2 * zr * zi + cy;
     zr = nr;
-    out[2 * n] = zr;
-    out[2 * n + 1] = zi;
+    out[STRIDE * n] = zr;
+    out[STRIDE * n + 1] = zi;
     n++;
     if (zr * zr + zi * zi > 1e10) return { len: n, escaped: true };
   }
   return { len: n, escaped: false, zr, zi };
 }
 
-// Fixed-point orbit. `cont` resumes a previous unescaped orbit.
+// Mandelbrot in fixed point.
 export function referenceOrbitBig(cx, cy, bits, maxIter, out, cont = null) {
   const B = BigInt(bits);
   const bail = 10_000_000_000n << (2n * B);
@@ -196,10 +207,164 @@ export function referenceOrbitBig(cx, cy, bits, maxIter, out, cont = null) {
     const nr = ((rr - ii) >> B) + cx;
     zi = ((zr * zi) >> (B - 1n)) + cy;
     zr = nr;
-    out[2 * n] = Number(zr >> shift) / div;
-    out[2 * n + 1] = Number(zi >> shift) / div;
+    out[STRIDE * n] = Number(zr >> shift) / div;
+    out[STRIDE * n + 1] = Number(zi >> shift) / div;
     n++;
     if (zr * zr + zi * zi > bail) return { len: n, escaped: true };
   }
   return { len: n, escaped: false, zr, zi };
 }
+
+// Webb: z_{n+1} = z_n² + z_{n-1} with z_0 = c, z_{-1} = 0. Texel: (Z_n, Z_n − Z_0).
+// The offset from the start is stored at full precision so that rebasing a
+// pixel onto the start of the reference does not go through a float32
+// subtraction of two nearly equal values.
+export function webbOrbitDouble(cx, cy, maxIter, out) {
+  let zr = cx;
+  let zi = cy;
+  let pr = 0;
+  let pi = 0;
+  out[0] = cx;
+  out[1] = cy;
+  out[2] = 0;
+  out[3] = 0;
+  let n = 1;
+  for (let i = 0; i < maxIter; i++) {
+    const nr = zr * zr - zi * zi + pr;
+    const ni = 2 * zr * zi + pi;
+    pr = zr;
+    pi = zi;
+    zr = nr;
+    zi = ni;
+    out[STRIDE * n] = zr;
+    out[STRIDE * n + 1] = zi;
+    out[STRIDE * n + 2] = zr - cx;
+    out[STRIDE * n + 3] = zi - cy;
+    n++;
+    if (zr * zr + zi * zi > 1e10) return { len: n, escaped: true };
+  }
+  return { len: n, escaped: false, zr, zi, pr, pi };
+}
+
+export function webbOrbitBig(cx, cy, bits, maxIter, out, cont = null) {
+  const B = BigInt(bits);
+  const bail = 10_000_000_000n << (2n * B);
+  const shift = bits > 60 ? BigInt(bits - 60) : 0n;
+  const div = bits > 60 ? B60 : 2 ** bits;
+  const f = (v) => Number(v >> shift) / div;
+  let zr = cont ? cont.zr : cx;
+  let zi = cont ? cont.zi : cy;
+  let pr = cont ? cont.pr : 0n;
+  let pi = cont ? cont.pi : 0n;
+  let n = cont ? cont.len : 1;
+  if (!cont) {
+    out[0] = f(cx);
+    out[1] = f(cy);
+    out[2] = 0;
+    out[3] = 0;
+  }
+  while (n < maxIter + 1) {
+    const nr = ((zr * zr - zi * zi) >> B) + pr;
+    const ni = ((zr * zi) >> (B - 1n)) + pi;
+    pr = zr;
+    pi = zi;
+    zr = nr;
+    zi = ni;
+    out[STRIDE * n] = f(zr);
+    out[STRIDE * n + 1] = f(zi);
+    out[STRIDE * n + 2] = f(zr - cx);
+    out[STRIDE * n + 3] = f(zi - cy);
+    n++;
+    if (zr * zr + zi * zi > bail) return { len: n, escaped: true };
+  }
+  return { len: n, escaped: false, zr, zi, pr, pi };
+}
+
+// Collatz: z ← 3z + 1 when floor|z| is odd, z / 2 when even. Both branches are
+// affine, so 3z + 1 is exact in fixed point and z / 2 drops one bit. Two texels
+// per step: (Z, log2 lo, log2 hi) and (parity, 0, 0, 0), where lo and hi are the
+// distances from |Z| down to floor|Z| and up to ceil|Z|: the two radii at which
+// a nearby pixel's parity differs from the reference's. They are stored as
+// log2 so values far below float32 range survive the trip to the GPU.
+//
+// Two float32 habits of the direct shader are kept so the tiers agree: above
+// 2^24 every float is an even integer, so the parity reads 0; between 2^23 and
+// 2^24 the length rounds to the nearest integer before the floor.
+const COLLATZ_STEPS = 500;
+const LOG_INF = 1e6;
+
+function isqrt(v) {
+  if (v < 2n) return v;
+  let x = 1n << BigInt((v.toString(2).length >> 1) + 1);
+  for (;;) {
+    const y = (x + v / x) >> 1n;
+    if (y >= x) return x;
+    x = y;
+  }
+}
+
+// log2 of a fixed-point value; -LOG_INF for zero.
+function log2Fixed(v, bits) {
+  if (v <= 0n) return -LOG_INF;
+  const bl = v.toString(2).length;
+  const top = bl > 53 ? Number(v >> BigInt(bl - 53)) : Number(v) * 2 ** (53 - bl);
+  return Math.log2(top) + (bl - 53) - bits;
+}
+
+export function collatzOrbitBig(cx, cy, bits, maxIter, out) {
+  const B = BigInt(bits);
+  const one = 1n << B;
+  const half = one >> 1n;
+  const overflow = 1_000_000_000_000_000n << B;   // |Z| ≥ 1e15, i.e. |Z|² ≥ 1e30
+  const evenOnly = 1n << (B + 24n);
+  const roundBand = 1n << (B + 23n);
+  const shift = bits > 60 ? BigInt(bits - 60) : 0n;
+  const div = bits > 60 ? B60 : 2 ** bits;
+  const f = (v) => Number(v >> shift) / div;
+  const steps = Math.min(maxIter, COLLATZ_STEPS);
+  let zr = cx;
+  let zi = cy;
+  let n = 0;
+  for (;;) {
+    const r = isqrt(zr * zr + zi * zi);
+    let parity;
+    let lo;
+    let hi;
+    if (r >= evenOnly) {
+      parity = 0;
+      lo = -1n;
+      hi = -1n;
+    } else {
+      const round = r >= roundBand;
+      const k = (round ? r + half : r) >> B;
+      parity = Number(k & 1n);
+      // In the rounding band the boundaries sit at half-integers.
+      lo = r - (k << B) + (round ? half : 0n);
+      hi = one - lo;
+    }
+    const o = 2 * STRIDE * n;
+    out[o] = f(zr);
+    out[o + 1] = f(zi);
+    out[o + 2] = lo < 0n ? LOG_INF : log2Fixed(lo, bits);
+    out[o + 3] = hi < 0n ? LOG_INF : log2Fixed(hi, bits);
+    out[o + 4] = parity;
+    n++;
+    if (r >= overflow) return { len: n, escaped: true };
+    if (n > steps) return { len: n, escaped: false };
+    if (parity) {
+      zr = 3n * zr + one;
+      zi = 3n * zi;
+    } else {
+      zr >>= 1n;
+      zi >>= 1n;
+    }
+  }
+}
+
+// Per-set orbit functions, texels per step, and the iteration count a budget
+// maps to (Collatz colours after two steps and gives up after 500).
+export const ORBITS = {
+  mandelbrot: { double: referenceOrbitDouble, big: referenceOrbitBig, stride: 1, iters: (n) => n },
+  webb: { double: webbOrbitDouble, big: webbOrbitBig, stride: 1, iters: (n) => n },
+  collatz: { double: null, big: collatzOrbitBig, stride: 2, iters: (n) => Math.min(n, COLLATZ_STEPS) },
+};
