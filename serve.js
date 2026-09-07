@@ -13,6 +13,8 @@ const mime = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json',
+  '.json': 'application/json',
 };
 
 http

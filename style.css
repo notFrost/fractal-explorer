@@ -50,6 +50,8 @@ button {
   padding: clamp(1.25rem, 4vw, 3rem);
 }
 
+.menu[hidden] { display: none; }
+
 .menu-head {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -73,6 +75,13 @@ button {
   margin: 0 0 0.35em;
   max-width: 34ch;
   color: var(--dim);
+}
+
+.gpu-error {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--magenta);
+  color: var(--magenta);
 }
 
 .cards {
@@ -150,6 +159,8 @@ button {
 
 /* ---------- Viewer ---------- */
 
+body.viewing { overflow: hidden; }
+
 .viewer {
   position: fixed;
   inset: 0;
@@ -222,11 +233,11 @@ button {
   backdrop-filter: blur(6px);
   display: grid;
   gap: 0.15rem;
-  max-width: calc(100vw - 1.5rem);
+  max-width: min(calc(100vw - 1.5rem), 52ch);
 }
 
-.hud-row { white-space: nowrap; }
-.hud-c { font-size: 1.1rem; }
+.hud-row { white-space: normal; overflow-wrap: anywhere; }
+.hud-c { font-size: 1.1rem; word-break: break-all; max-width: 44ch; }
 .hud-k { color: var(--dim); display: inline-block; min-width: 4ch; }
 .hud-dim { color: var(--dim); }
 
@@ -255,35 +266,53 @@ button {
   text-align: right;
 }
 
-.touchbar {
-  display: none;
+/* Control bar: iteration detail down/up and screenshot. Same on every device. */
+
+.controls {
   position: absolute;
-  right: 0.75rem;
-  bottom: max(0.75rem, env(safe-area-inset-bottom));
+  right: max(0.75rem, env(safe-area-inset-right));
+  bottom: calc(max(0.75rem, env(safe-area-inset-bottom)) + 2rem);
+  display: flex;
   gap: 0.5rem;
 }
 
-.tbtn {
+.cbtn {
   width: 3rem;
   height: 3rem;
-  font-size: 1.4rem;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--ink);
   background: var(--panel);
-  border: 1px solid var(--line);
+  border: 1px solid var(--dim);
+  border-radius: 50%;
   backdrop-filter: blur(6px);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.tbtn:active { background: var(--magenta); color: #000; }
+.cbtn-accent { border-color: var(--magenta); color: var(--magenta); }
+.cbtn:hover { border-color: var(--ink); }
+.cbtn:active, .cbtn-accent:hover { background: var(--magenta); border-color: var(--magenta); color: #000; }
 
 @media (pointer: coarse) {
   .help { display: none; }
-  .touchbar { display: flex; }
+  .controls { bottom: max(0.75rem, env(safe-area-inset-bottom)); }
 }
 
+/* Narrow screens: the HUD owns the bottom, so the controls join the top bar. */
 @media (max-width: 720px) {
-  .menu-head { grid-template-columns: 1fr; }
-  .cards { grid-template-columns: 1fr; gap: 1rem; }
-  .card { grid-template-columns: 1fr; }
-  .hud-c { font-size: 0.95rem; }
+  .help { display: none; }
+  .controls {
+    top: max(0.75rem, env(safe-area-inset-top));
+    bottom: auto;
+  }
+  .cbtn { width: 2.5rem; height: 2.5rem; font-size: 1rem; }
+  .cbtn svg { width: 18px; height: 18px; }
+  .set-name { font-size: 1rem; }
+  .hud { max-width: calc(100vw - 1.5rem); }
+  .hud-c { font-size: 0.9rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
