@@ -47,6 +47,14 @@ export const SETS = {
     home: { x: -1.7561482916191014, y: 0.029730420820441892, zoom: 3194.799993706228 },
     bookmarks: [{ x: 0, y: 0, zoom: 100 }],
   },
+  mandelbug: {
+    name: 'MandelBug',
+    formula: 'z ← Re(z²) + 2i(Re z + Im z) + c',
+    // The bulk of the set. Everything outside it is the line Im c = −Re c,
+    // where c is its own fixed point, running off to infinity.
+    home: { x: -0.97, y: 0.97, zoom: 157 },
+    bookmarks: [{ x: 0, y: 0, zoom: 100 }],
+  },
 };
 
 export const MIN_LOG_ZOOM = Math.log2(10);

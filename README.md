@@ -2,8 +2,8 @@
 
 **[Live demo](https://fractal-explorer-six.vercel.app/app/)**
 
-A web port of a PenguinMod project (`FractalExplorer.pmp`). Five escape-time
-sets drawn on the GPU with WebGL2 fragment shaders. All five zoom without a
+A web port of a PenguinMod project (`FractalExplorer.pmp`). Six escape-time
+sets drawn on the GPU with WebGL2 fragment shaders. All six zoom without a
 precision limit. The original's camera model, pen colours, and controls carry
 over; the CPU pen-plotting does not.
 
@@ -83,9 +83,9 @@ the detail buttons, capped at 100 000), and the reference orbit costs about
 90 ms at 10^300. At 10^300 a 1280×800 frame is roughly 80 strips and under a
 second on an RTX 2060.
 
-**Webb**, **Collatz**, **Julia** and **Burning Ship** iterate directly in
-float32 up to 10^6 zoom and use the same three tiers beyond it, with their own
-reference orbits and shaders.
+**Webb**, **Collatz**, **Julia**, **Burning Ship** and **MandelBug** iterate
+directly in float32 up to 10^6 zoom and use the same three tiers beyond it,
+with their own reference orbits and shaders.
 
 Webb's two-term recurrence carries a delta on both terms,
 `d ← (2Z + d) d + e, e ← d`. The map has no critical point, so the delta never
@@ -123,6 +123,14 @@ exact differences, expanding the square gives
 `di ← 2(|Zr| b + |Zi| a + a b) − dci`. The minus on `dci` is the original's:
 it iterates `z ← (|Re z| + i|Im z|)² + c̄`, conjugating `c` so the ship stands
 upright on a y-up stage, and the port keeps that rather than correcting it.
+
+MandelBug is Mandelbrot with the imaginary part mistyped: `2 Zr Zi` written as
+`2(Zr + Zi)`. The real part of the delta is then Mandelbrot's own,
+`Re[(2Z + d) d] + dcr`, and the imaginary part is linear, so it is exact at any
+scale: `2(dr + di) + dci`. Nothing cancels that Mandelbrot does not already
+cancel, and `Z₀ = 0`, so its rebasing is used unchanged. The set is unbounded:
+every `c` on the line `Im c = −Re c` is its own fixed point, so the whole line
+belongs to it. The menu opens on the bulk instead, around `−0.97 + 0.97i`.
 
 **Colour** is the original pen mapping: hue `(t + 90) mod 100` on a 0..100
 wheel, brightness `t × 5` clamped, inside points black.

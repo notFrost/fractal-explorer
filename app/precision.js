@@ -327,6 +327,52 @@ export function shipOrbitBig(cx, cy, bits, maxIter, out, cont = null) {
   return { len: n, escaped: false, zr, zi };
 }
 
+// MandelBug: Mandelbrot with a bug in the imaginary part, where 2·Zr·Zi was
+// written 2(Zr + Zi). So Zr' = Zr² − Zi² + Cr, Zi' = 2(Zr + Zi) + Ci, with
+// Z_0 = 0 as in Mandelbrot. Texel: (Z, 0, 0).
+export function bugOrbitDouble(cx, cy, maxIter, out) {
+  let zr = 0;
+  let zi = 0;
+  out[0] = 0;
+  out[1] = 0;
+  let n = 1;
+  for (let i = 0; i < maxIter; i++) {
+    const nr = zr * zr - zi * zi + cx;
+    zi = 2 * (zr + zi) + cy;
+    zr = nr;
+    out[STRIDE * n] = zr;
+    out[STRIDE * n + 1] = zi;
+    n++;
+    if (zr * zr + zi * zi > 1e10) return { len: n, escaped: true };
+  }
+  return { len: n, escaped: false, zr, zi };
+}
+
+export function bugOrbitBig(cx, cy, bits, maxIter, out, cont = null) {
+  const B = BigInt(bits);
+  const bail = 10_000_000_000n << (2n * B);
+  let zr = cont ? cont.zr : 0n;
+  let zi = cont ? cont.zi : 0n;
+  let n = cont ? cont.len : 1;
+  if (!cont) {
+    out[0] = 0;
+    out[1] = 0;
+  }
+  const shift = bits > 60 ? BigInt(bits - 60) : 0n;
+  const div = bits > 60 ? B60 : 2 ** bits;
+  while (n < maxIter + 1) {
+    // The imaginary part is linear, so it needs no shift back down.
+    const nr = ((zr * zr - zi * zi) >> B) + cx;
+    zi = ((zr + zi) << 1n) + cy;
+    zr = nr;
+    out[STRIDE * n] = Number(zr >> shift) / div;
+    out[STRIDE * n + 1] = Number(zi >> shift) / div;
+    n++;
+    if (zr * zr + zi * zi > bail) return { len: n, escaped: true };
+  }
+  return { len: n, escaped: false, zr, zi };
+}
+
 // Julia: z ← z² + C with C fixed and the pixel supplying z_0. Two orbits under
 // the same C go into the texture back to back: the critical orbit (Z_0 = 0) at
 // texels [0, split), then the view-centre orbit at [split, texels). A pixel
@@ -495,4 +541,5 @@ export const ORBITS = {
   collatz: { double: null, big: collatzOrbitBig, stride: 2, iters: (n) => Math.min(n, COLLATZ_STEPS) },
   julia: { double: juliaOrbitDouble, big: juliaOrbitBig, stride: 2, iters: (n) => n },
   burningship: { double: shipOrbitDouble, big: shipOrbitBig, stride: 1, iters: (n) => n },
+  mandelbug: { double: bugOrbitDouble, big: bugOrbitBig, stride: 1, iters: (n) => n },
 };
