@@ -1,6 +1,6 @@
 // App-shell cache. Network first so edits show up on reload; cache fallback
 // keeps the explorer working offline once it has loaded once.
-const CACHE = 'fractal-explorer-v2';
+const CACHE = 'fractal-explorer-v3';
 const SHELL = [
   './',
   './index.html',

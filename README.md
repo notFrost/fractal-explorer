@@ -1,13 +1,13 @@
 # Fractal Explorer
 
-**[Live demo](https://fractal-explorer-six.vercel.app)**
+**[Live demo](https://fractal-explorer-six.vercel.app/app/)**
 
 A web port of a PenguinMod project (`FractalExplorer.pmp`). Five escape-time
 sets drawn on the GPU with WebGL2 fragment shaders. All five zoom without a
 precision limit. The original's camera model, pen colours, and controls carry
 over; the CPU pen-plotting does not.
 
-Try [10^301 zoom](https://fractal-explorer-six.vercel.app/#mandelbrot@0,1,2^1000.000)
+Try [10^301 zoom](https://fractal-explorer-six.vercel.app/app/#mandelbrot@0,1,2^1000.000)
 to see the arbitrary-precision path working: a 1128-bit reference orbit, drawn
 in 77 strips.
 
@@ -17,8 +17,15 @@ in 77 strips.
 node serve.js
 ```
 
-Then open http://localhost:5173. The server exists only because ES modules do
-not load from `file://`. Any static server works. Needs a browser with WebGL2.
+Then open http://localhost:5173/app/. The server exists only because ES
+modules do not load from `file://`. Any static server works. Needs a browser
+with WebGL2.
+
+The site is two pages. `/portal/` is the home: a list of links to the
+explorer, the two repos, and the notes. `/` redirects there. `/app/` is the
+explorer itself. Share links used to point at the root, so the portal reads
+the hash on load and forwards anything shaped like `#mandelbrot@x,y,zoom` to
+`/app/`.
 
 ## Controls
 

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <script>
+    // Old share links pointed at the root, so "/#mandelbrot@x,y,zoom" now lands
+    // here. Hand it to the explorer before anything paints.
+    if (/^#\w+@/.test(location.hash)) location.replace('../app/' + location.hash);
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Fractal Explorer</title>
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#000000" />
+  <link rel="icon" href="../app/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="portal">
+    <header class="portal-head">
+      <h1 class="title">Fractal<br />Explorer</h1>
+      <p class="lede">A WebGL port of a PenguinMod project, and the notes behind it.</p>
+    </header>
+
+    <ul class="links">
+      <li>
+        <a href="../app/">
+          <span class="link-name">Explorer</span>
+          <span class="link-note">Five escape-time sets on the GPU, unbounded zoom.</span>
+        </a>
+      </li>
+      <li>
+        <a href="https://github.com/notFrost/fractal-explorer" target="_blank" rel="noopener">
+          <span class="link-name">WebGL port on GitHub</span>
+          <span class="link-note">Source for this site.</span>
+        </a>
+      </li>
+      <li>
+        <a href="https://github.com/SuperstickanimationYT/Keagan-s-Programming-Projects" target="_blank" rel="noopener">
+          <span class="link-name">Original PenguinMod version on GitHub</span>
+          <span class="link-note">The .pmp project this is ported from, by SuperstickanimationYT.</span>
+        </a>
+      </li>
+      <li>
+        <a href="https://docs.google.com/document/d/1wALFrVkk-_85uonUViMuUSTZKa7qo9Y2_SntRH9WcOk/edit?tab=t.z3wxgfwz3l2n" target="_blank" rel="noopener">
+          <span class="link-name">Concepts</span>
+          <span class="link-note">Planned features and optimisations for the WebGL version.</span>
+        </a>
+      </li>
+      <li>
+        <a href="https://docs.google.com/presentation/d/106CdTgZM5HDGHa4PEzCIYkgsmnusUUAUXT4-2Fnl71c/edit?slide=id.g3fa4a353cbd_9_0#slide=id.g3fa4a353cbd_9_0" target="_blank" rel="noopener">
+          <span class="link-name">UI ideas and Mandelbrot set explanation</span>
+          <span class="link-note">Slide deck.</span>
+        </a>
+      </li>
+    </ul>
+
+    <footer class="portal-foot">
+      <span>Ported from a PenguinMod project. Renders on the GPU.</span>
+    </footer>
+  </main>
+</body>
+</html>
