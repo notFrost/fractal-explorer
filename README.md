@@ -131,13 +131,6 @@ wheel, brightness `t × 5` clamped, inside points black.
 the strips of one frame. `ref` is the CPU time for the reference orbit when it
 had to be recomputed.
 
-## Installable app
-
-`manifest.webmanifest` and `sw.js` make it a Progressive Web App. Install it
-from the browser menu on a phone or desktop. The service worker caches the
-app shell network-first, so edits show up on reload and the explorer keeps
-working offline once it has loaded.
-
 ## Ported from the original
 
 - Coordinates: `c = pixel / zoom + camera`, with the canvas height standing in
