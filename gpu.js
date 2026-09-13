@@ -20,6 +20,8 @@ uniform float u_pxm;       // pixel size mantissa (floatexp tier)
 uniform int u_pxe;         // pixel size exponent (floatexp tier)
 uniform int u_maxIter;
 uniform int u_refLen;
+uniform int u_ref2;        // where Julia's second reference orbit starts
+uniform vec2 u_julia;      // Julia's parameter C (direct tier only)
 uniform sampler2D u_ref;   // reference orbit, RGBA32F, 1024 wide
 
 out vec4 outColor;
@@ -358,6 +360,186 @@ void main() {
   outColor = vec4(palette(escape(fe(px * u_pxm, u_pxe))), 1.0);
 }`;
 
+// Julia: the same z² + C, but C is fixed and the pixel supplies z_0.
+const JULIA = `
+float escape(vec2 z) {
+  for (int n = 0; n < u_maxIter; n++) {
+    z = csq(z) + u_julia;
+    float zz = dot(z, z);
+    if (zz > 1e4) return smoothT(n + 1, log(zz));
+  }
+  return 0.0;
+}
+
+void main() {
+  vec2 z = u_center + (gl_FragCoord.xy - 0.5 * u_res) * u_px;
+  outColor = vec4(palette(escape(z)), 1.0);
+}`;
+
+// Julia by perturbation. C is the same for every pixel, so the delta has no dc
+// term: d ← (2Z + d) d, starting from the pixel's offset from the reference
+// centre. The cancellation in that product happens when Z ≈ −d/2, that is when
+// |z| ≈ |d| / 2 — the pixel's orbit passing closer to the origin than its own
+// delta. Rebasing onto the centre orbit's start would be no help, since its
+// Z_0 is the view centre rather than zero, so the texture carries a second
+// orbit: the critical one, Z_0 = 0, at texels [0, u_ref2). A pixel rides the
+// centre orbit at [u_ref2, u_refLen) until that first cancellation (or until
+// the orbit runs out), then sets d = z and follows the critical orbit with
+// Mandelbrot's rebasing, which is exact there because the orbit starts at 0.
+const JULIA_PERT = `
+float escape(vec2 d0) {
+  vec2 d = d0;
+  int m = 0;
+  bool crit = false;
+  int split = u_ref2;
+  int cLast = split - 1;
+  int oLast = u_refLen - split - 1;
+  for (int n = 0; n < u_maxIter; n++) {
+    int base = crit ? 0 : split;
+    vec2 Z = refAt(base + m).xy;
+    d = cmul(2.0 * Z + d, d);
+    m++;
+    int last = crit ? cLast : oLast;
+    vec2 z = refAt(base + min(m, last)).xy + d;
+    float zz = dot(z, z);
+    if (zz > 1e4) return smoothT(n + 1, log(zz));
+    if (zz < dot(d, d) || m >= last) { d = z; m = 0; crit = true; }
+  }
+  return 0.0;
+}
+
+void main() {
+  vec2 d0 = (gl_FragCoord.xy - 0.5 * u_res + u_offset) * u_px;
+  outColor = vec4(palette(escape(d0)), 1.0);
+}`;
+
+const JULIA_FE = FE_LIB + `
+float escape(FE d0) {
+  FE d = d0;
+  int m = 0;
+  bool crit = false;
+  int split = u_ref2;
+  int cLast = split - 1;
+  int oLast = u_refLen - split - 1;
+  for (int n = 0; n < u_maxIter; n++) {
+    int base = crit ? 0 : split;
+    vec2 Z = refAt(base + m).xy;
+    vec2 t = 2.0 * Z + feToFloat(d);
+    d = fe(cmul(t, d.m), d.e);
+    m++;
+    int last = crit ? cLast : oLast;
+    FE z = feAdd(fe(refAt(base + min(m, last)).xy, 0), d);
+    if (z.e >= 6) {
+      float zz = dot(z.m, z.m) * pow2(2 * min(z.e, 60));
+      if (zz > 1e4) return smoothT(n + 1, log(zz));
+    }
+    if (feLess(z, d) || m >= last) { d = z; m = 0; crit = true; }
+  }
+  return 0.0;
+}
+
+void main() {
+  vec2 px = gl_FragCoord.xy - 0.5 * u_res + u_offset;
+  outColor = vec4(palette(escape(fe(px * u_pxm, u_pxe))), 1.0);
+}`;
+
+// Burning Ship as the original writes it: the imaginary part of c enters
+// negated, which is z ← (|Re z| + i|Im z|)² + c̄. That conjugate is what stands
+// the ship upright on a y-up stage, so it is kept rather than corrected.
+const BURNING_SHIP = `
+float escape(vec2 c) {
+  vec2 z = vec2(0.0);
+  for (int n = 0; n < u_maxIter; n++) {
+    z = vec2(z.x * z.x - z.y * z.y + c.x, 2.0 * abs(z.x) * abs(z.y) - c.y);
+    float zz = dot(z, z);
+    if (zz > 1e4) return smoothT(n + 1, log(zz));
+  }
+  return 0.0;
+}
+
+void main() {
+  vec2 c = u_center + (gl_FragCoord.xy - 0.5 * u_res) * u_px;
+  outColor = vec4(palette(escape(c)), 1.0);
+}`;
+
+// Burning Ship by perturbation. The absolute values are the whole difficulty:
+// |Z + d| − |Z| cannot be formed by subtracting two nearly equal floats, so it
+// is taken by cases instead (the "diffabs" trick), which is exact. Write that
+// difference for both parts as w, so the pixel's absolute value is exactly
+// |Z| + w. Expanding the square then collapses to Mandelbrot's own shape:
+//   d' = (2 |Z| + w) w + c̄ − C̄
+// with the conjugate negating the imaginary offset. Z_0 = 0 as in Mandelbrot,
+// so a rebase is d = z, m = 0.
+const SHIP_PERT = `
+float diffabs(float X, float x) {
+  if (X >= 0.0) return X + x >= 0.0 ? x : -(2.0 * X + x);
+  return X + x > 0.0 ? 2.0 * X + x : -x;
+}
+
+float escape(vec2 dc) {
+  vec2 d = vec2(0.0);
+  vec2 dcc = vec2(dc.x, -dc.y);
+  int m = 0;
+  int last = u_refLen - 1;
+  for (int n = 0; n < u_maxIter; n++) {
+    vec2 Z = refAt(m).xy;
+    vec2 w = vec2(diffabs(Z.x, d.x), diffabs(Z.y, d.y));
+    d = cmul(2.0 * abs(Z) + w, w) + dcc;
+    m++;
+    vec2 z = refAt(min(m, last)).xy + d;
+    float zz = dot(z, z);
+    if (zz > 1e4) return smoothT(n + 1, log(zz));
+    if (zz < dot(d, d) || m >= last) { d = z; m = 0; }
+  }
+  return 0.0;
+}
+
+void main() {
+  vec2 dc = (gl_FragCoord.xy - 0.5 * u_res + u_offset) * u_px;
+  outColor = vec4(palette(escape(dc)), 1.0);
+}`;
+
+// The same recurrence with floatexp deltas. diffabs keeps the delta's own
+// scale: a delta far below the reference component cannot reach past zero, so
+// the sign of that component alone decides and the answer is ±x exactly.
+// Otherwise the reference component is brought into the delta's scale, where
+// it is at most 2^30 times the mantissa, and the cases are taken in float32.
+const SHIP_FE = FE_LIB + `
+float diffabsScaled(float X, float m, int e) {
+  if (X == 0.0) return abs(m);
+  int gap = (((floatBitsToInt(X) >> 23) & 255) - 127) - e;   // log2|X| − e
+  if (gap > 30) return X > 0.0 ? m : -m;
+  float Xs = X * pow2(-e);
+  if (X > 0.0) return Xs + m >= 0.0 ? m : -(2.0 * Xs + m);
+  return Xs + m > 0.0 ? 2.0 * Xs + m : -m;
+}
+
+float escape(FE dc) {
+  FE d = FE(vec2(0.0), EMIN);
+  FE dcc = FE(vec2(dc.m.x, -dc.m.y), dc.e);   // + c̄
+  int m = 0;
+  int last = u_refLen - 1;
+  for (int n = 0; n < u_maxIter; n++) {
+    vec2 Z = refAt(m).xy;
+    FE w = FE(vec2(diffabsScaled(Z.x, d.m.x, d.e), diffabsScaled(Z.y, d.m.y, d.e)), d.e);
+    vec2 t = 2.0 * abs(Z) + feToFloat(w);
+    d = feAdd(fe(cmul(t, w.m), w.e), dcc);
+    m++;
+    FE z = feAdd(fe(refAt(min(m, last)).xy, 0), d);
+    if (z.e >= 6) {
+      float zz = dot(z.m, z.m) * pow2(2 * min(z.e, 60));
+      if (zz > 1e4) return smoothT(n + 1, log(zz));
+    }
+    if (feLess(z, d) || m >= last) { d = z; m = 0; }
+  }
+  return 0.0;
+}
+
+void main() {
+  vec2 px = gl_FragCoord.xy - 0.5 * u_res + u_offset;
+  outColor = vec4(palette(escape(fe(px * u_pxm, u_pxe))), 1.0);
+}`;
+
 const SOURCES = {
   mandelbrot: MANDELBROT,
   mandelbrotFE: MANDELBROT_FE,
@@ -366,6 +548,12 @@ const SOURCES = {
   webbFE: WEBB_FE,
   collatz: COLLATZ,
   collatzPert: COLLATZ_PERT,
+  julia: JULIA,
+  juliaPert: JULIA_PERT,
+  juliaFE: JULIA_FE,
+  ship: BURNING_SHIP,
+  shipPert: SHIP_PERT,
+  shipFE: SHIP_FE,
 };
 
 // Programs per set: `float` iterates directly (absent for Mandelbrot, which is
@@ -374,12 +562,20 @@ const SHADERS = {
   mandelbrot: { pert: 'mandelbrot', fe: 'mandelbrotFE' },
   webb: { float: 'webb', pert: 'webbPert', fe: 'webbFE' },
   collatz: { float: 'collatz', pert: 'collatzPert', fe: 'collatzPert' },
+  julia: { float: 'julia', pert: 'juliaPert', fe: 'juliaFE' },
+  burningship: { float: 'ship', pert: 'shipPert', fe: 'shipFE' },
 };
 
 // Relative cost of one pixel-iteration, for splitting frames into strips.
-const COST = { mandelbrot: 1, mandelbrotFE: 5, webb: 1, webbPert: 1.5, webbFE: 6, collatz: 1, collatzPert: 8 };
+const COST = {
+  mandelbrot: 1, mandelbrotFE: 5,
+  webb: 1, webbPert: 1.5, webbFE: 6,
+  collatz: 1, collatzPert: 8,
+  julia: 1, juliaPert: 1, juliaFE: 5,
+  ship: 1.2, shipPert: 2, shipFE: 7,
+};
 
-const UNIFORMS = ['u_res', 'u_px', 'u_center', 'u_offset', 'u_pxm', 'u_pxe', 'u_maxIter', 'u_refLen', 'u_ref'];
+const UNIFORMS = ['u_res', 'u_px', 'u_center', 'u_offset', 'u_pxm', 'u_pxe', 'u_maxIter', 'u_refLen', 'u_ref2', 'u_julia', 'u_ref'];
 const REF_W = 1024;
 
 // Pixel-iterations per draw call. Keeps each call well under GPU watchdog limits.
@@ -428,9 +624,9 @@ export class Renderer {
       this.programs[name] = { p, u: Object.fromEntries(UNIFORMS.map((n) => [n, gl.getUniformLocation(p, n)])) };
     }
     // One fixed-size texture and one staging buffer, reused for every reference.
-    // Sized for the longest orbit at one texel per step; Collatz uses two per
-    // step but stops at 500.
-    this.refRows = Math.ceil((MAX_ITER + 2) / REF_W);
+    // Room for two full-length orbits, which is what Julia stores; Collatz uses
+    // two texels per step but stops at 500.
+    this.refRows = Math.ceil((2 * MAX_ITER + 4) / REF_W);
     this.refBuf = new Float32Array(REF_W * this.refRows * 4);
     this.refTex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.refTex);
@@ -455,9 +651,12 @@ export class Renderer {
     const orbit = ORBITS[set];
     const big = !orbit.double || cam.lz > BIG_LOG_ZOOM;
     const bits = big ? bitsFor(cam.lz) : 64;
+    // Julia's orbits depend on C as well as on the centre, so C keys the cache.
+    const p = view.julia;
+    const pkey = set === 'julia' ? `${p.re},${p.im}` : '';
     let ref = this.ref;
     let reuse = false;
-    if (ref && ref.set === set && ref.big === big && ref.bits >= bits) {
+    if (ref && ref.set === set && ref.pkey === pkey && ref.big === big && ref.bits >= bits) {
       const o = cam.offsetFrom(ref.cam);
       if (Math.abs(o.x) <= 2 * screenPx && Math.abs(o.y) <= 2 * screenPx) reuse = true;
     }
@@ -467,21 +666,22 @@ export class Renderer {
     if (reuse) {
       // Extend the stored orbit.
       const r = ref.big
-        ? orbit.big(ref.cam.x, ref.cam.y, ref.bits, iters, this.refBuf, ref)
-        : orbit.double(ref.cam.xDouble(), ref.cam.yDouble(), iters, this.refBuf);
+        ? orbit.big(ref.cam.x, ref.cam.y, ref.bits, iters, this.refBuf, ref, p)
+        : orbit.double(ref.cam.xDouble(), ref.cam.yDouble(), iters, this.refBuf, p);
       Object.assign(ref, r);
     } else {
       // Carry 64 spare bits so the orbit stays valid for 2^64 of further zoom.
       const c = cam.clone();
       if (big) c.setLogZoom(cam.lz + 64);
       const r = big
-        ? orbit.big(c.x, c.y, c.bits, iters, this.refBuf)
-        : orbit.double(c.xDouble(), c.yDouble(), iters, this.refBuf);
-      ref = { set, cam: c, bits: big ? c.bits : 64, big, ...r };
+        ? orbit.big(c.x, c.y, c.bits, iters, this.refBuf, null, p)
+        : orbit.double(c.xDouble(), c.yDouble(), iters, this.refBuf, p);
+      ref = { set, pkey, cam: c, bits: big ? c.bits : 64, big, ...r };
     }
     ref.iters = iters;
     ref.cpuMs = performance.now() - t0;
-    const rows = Math.ceil((ref.len * orbit.stride) / REF_W);
+    // An orbit that does not fill len × stride texels reports its own footprint.
+    const rows = Math.ceil((ref.texels ?? ref.len * orbit.stride) / REF_W);
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.refTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, REF_W, rows, gl.RGBA, gl.FLOAT, this.refBuf, 0);
@@ -519,7 +719,9 @@ export class Renderer {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.refTex);
       gl.uniform1i(prog.u.u_ref, 0);
-      gl.uniform1i(prog.u.u_refLen, ref.len);
+      // Julia spans both stored orbits, so it counts texels rather than steps.
+      gl.uniform1i(prog.u.u_refLen, ref.texels ?? ref.len);
+      gl.uniform1i(prog.u.u_ref2, ref.split ?? 0);
       // pixel size = 2^-lz / scale, split into mantissa and exponent
       const e = Math.floor(-cam.lz);
       const m = 2 ** (-cam.lz - e) / scale;
@@ -536,6 +738,7 @@ export class Renderer {
       this.tier = 'float';
     }
     const prog = this.programs[name];
+    if (view.julia) gl.uniform2f(prog.u.u_julia, Number(view.julia.re), Number(view.julia.im));
     gl.viewport(0, 0, w, h);
     gl.uniform2f(prog.u.u_res, w, h);
     gl.uniform1i(prog.u.u_maxIter, view.maxIter);

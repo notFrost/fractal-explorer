@@ -1,9 +1,11 @@
 // Set metadata and the iteration budget.
 
+// `home` is where a set opens from the menu, and what its card thumbnail shows.
 export const SETS = {
   mandelbrot: {
     name: 'Mandelbrot',
     formula: 'z ← z² + c',
+    home: { x: 0, y: 0, zoom: 100 },
     bookmarks: [
       { x: 0.38, y: 0.1, zoom: 40000 },
       { x: 0.297364, y: -0.019193, zoom: 41018 },
@@ -14,12 +16,36 @@ export const SETS = {
     name: 'Collatz',
     formula: 'z ← 3z + 1  or  z / 2',
     maxIter: 500,
+    home: { x: 0, y: 0, zoom: 100 },
     bookmarks: [],
   },
   webb: {
     name: 'Webb',
     formula: 'zₙ₊₁ ← zₙ² + zₙ₋₁',
+    home: { x: 0, y: 0, zoom: 100 },
     bookmarks: [],
+  },
+  julia: {
+    name: 'Julia',
+    formula: 'z ← z² + C',
+    home: { x: 0, y: 0, zoom: 100 },
+    // C is the set's parameter, not a coordinate: the pixel is z₀. Kept as the
+    // strings the user typed so the URL hash round-trips them exactly.
+    c: { re: '-0.74543', im: '0.11301' },
+    presets: [
+      { name: "Douady's Rabbit", re: '-0.123', im: '0.745' },
+      { name: 'Tree-Like Spiral', re: '-0.7', im: '0.27' },
+      { name: 'Elongated Tendrils', re: '-0.8', im: '0.156' },
+      { name: 'Seashell', re: '-0.4', im: '0.6' },
+    ],
+    bookmarks: [],
+  },
+  burningship: {
+    name: 'Burning Ship',
+    formula: 'z ← (|Re z| + i|Im z|)² + c̄',
+    // The original opens on the small ship below the main hull.
+    home: { x: -1.7561482916191014, y: 0.029730420820441892, zoom: 3194.799993706228 },
+    bookmarks: [{ x: 0, y: 0, zoom: 100 }],
   },
 };
 

@@ -8,6 +8,9 @@ const state = {
   set: 'mandelbrot',
   cam: new Camera(0, 0, 100),
   detail: 1,
+  // Julia's parameter, kept as the strings the user typed so the hash
+  // round-trips them exactly.
+  julia: { ...SETS.julia.c },
 };
 
 const $ = (s) => document.querySelector(s);
@@ -30,6 +33,14 @@ const goto = {
   any: $('#goto-any'),
   error: $('#goto-error'),
 };
+const juliaUi = {
+  panel: $('#julia-panel'),
+  re: $('#julia-re'),
+  im: $('#julia-im'),
+  presets: $('#julia-presets'),
+  error: $('#julia-error'),
+  label: $('#set-c'),
+};
 
 let renderer = null;
 let mode = 'menu';
@@ -42,6 +53,18 @@ try {
 }
 
 const iterNow = () => iterationsFor(state.cam.lz, state.detail, state.set);
+
+// Everything a frame needs: which set, where, how hard, and Julia's C.
+const viewNow = (maxIter = iterNow()) => ({ set: state.set, cam: state.cam, maxIter, julia: state.julia });
+
+// C as text, both for the URL and for the label above the HUD.
+const juliaText = (c) => `${c.re} ${String(c.im).startsWith('-') ? '−' : '+'} ${String(c.im).replace(/^[-+]/, '')}i`;
+
+// A pair of typed numbers, or null when either is unreadable.
+function readC(re, im) {
+  const ok = (s) => typeof s === 'string' && s.trim() !== '' && Number.isFinite(Number(s));
+  return ok(re) && ok(im) ? { re: String(re).trim(), im: String(im).trim() } : null;
+}
 
 function fmt(n) {
   const a = Math.abs(n);
@@ -85,17 +108,20 @@ function scheduleHash() {
   hashTimer = setTimeout(() => {
     if (mode !== 'view') return;
     const c = state.cam;
-    history.replaceState(null, '', `#${state.set}@${c.xString()},${c.yString()},${c.zoomString()}`);
+    // Julia carries its parameter in two extra fields: #julia@x,y,zoom,re,im
+    const j = state.set === 'julia' ? `,${state.julia.re},${state.julia.im}` : '';
+    history.replaceState(null, '', `#${state.set}@${c.xString()},${c.yString()},${c.zoomString()}${j}`);
   }, 300);
 }
 
 function readHash() {
-  const m = location.hash.match(/^#(\w+)@([^,]+),([^,]+),([^,]+)$/);
+  const m = location.hash.match(/^#(\w+)@([^,]+),([^,]+),([^,]+)(?:,([^,]+),([^,]+))?$/);
   if (!m || !SETS[m[1]]) return false;
   const cam = Camera.fromStrings(m[2], m[3], m[4]);
   if (!cam) return false;
   state.set = m[1];
   state.cam = cam;
+  state.julia = readC(m[5], m[6]) || { ...SETS.julia.c };
   return true;
 }
 
@@ -141,7 +167,7 @@ function render() {
   state.cam.setLogZoom(clampLogZoom(state.cam.lz));
   const maxIter = iterNow();
   const seq = ++frameSeq;
-  const { strips } = renderer.begin({ set: state.set, cam: state.cam, maxIter });
+  const { strips } = renderer.begin(viewNow(maxIter));
   updateHud();
   scheduleHash();
   const size = `${canvas.width}×${canvas.height}`;
@@ -161,7 +187,7 @@ function render() {
   const step = () => {
     if (seq !== frameSeq || mode !== 'view') return;
     // Uniforms may have been replaced by a thumbnail or export; re-issue them.
-    if (i > 0) renderer.begin({ set: state.set, cam: state.cam, maxIter }, false);
+    if (i > 0) renderer.begin(viewNow(maxIter), false);
     renderer.drawStrip(i, strips);
     i++;
     if (i < strips) {
@@ -185,9 +211,10 @@ function savePng() {
   canvas.width = Math.round(w * scale);
   canvas.height = Math.round(h * scale);
   hud.status.textContent = `rendering ${canvas.width}×${canvas.height} for download…`;
-  renderer.renderAll({ set: state.set, cam: state.cam, maxIter });
+  renderer.renderAll(viewNow(maxIter));
   const c = state.cam;
-  const name = `${state.set}_${c.xString().slice(0, 24)}_${c.yString().slice(0, 24)}_${c.zoomString()}x.png`;
+  const j = state.set === 'julia' ? `_C${state.julia.re}_${state.julia.im}i` : '';
+  const name = `${state.set}${j}_${c.xString().slice(0, 24)}_${c.yString().slice(0, 24)}_${c.zoomString()}x.png`;
   canvas.toBlob((blob) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -218,12 +245,18 @@ function parseZoom(str) {
 const NUM = String.raw`[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?`;
 const COMPLEX = new RegExp(`^(${NUM})\\s*([-+])\\s*(${NUM})\\s*i(?:\\s*@\\s*(.+))?$`, 'i');
 
+// Julia links carry two extra fields for C.
+const LINK = new RegExp(
+  `(${Object.keys(SETS).join('|')})@([^,\\s]+),([^,\\s]+),([^,\\s#]+)(?:,([^,\\s]+),([^,\\s#]+))?`,
+  'i',
+);
+
 // Reads a share link or its hash, "x, y[, zoom]", or the HUD's "x ± yi [@ zoom]".
-// Returns { set?, xs, ys, lz? } with lz undefined when the text gives no zoom.
+// Returns { set?, xs, ys, lz?, c? } with lz undefined when the text gives no zoom.
 function parseLocation(text) {
   const t = String(text).trim().replace(/[−–]/g, '-');
-  let m = /(mandelbrot|collatz|webb)@([^,\s]+),([^,\s]+),([^,\s#]+)/i.exec(t);
-  if (m) return { set: m[1].toLowerCase(), xs: m[2], ys: m[3], lz: parseZoom(m[4]) };
+  let m = LINK.exec(t);
+  if (m) return { set: m[1].toLowerCase(), xs: m[2], ys: m[3], lz: parseZoom(m[4]), c: readC(m[5], m[6]) };
   m = COMPLEX.exec(t);
   if (m) return { xs: m[1], ys: m[2] + m[3].replace(/^[-+]/, ''), lz: m[4] ? parseZoom(m[4]) : undefined };
   const parts = t.split(/[,\s;]+/).filter(Boolean);
@@ -239,7 +272,10 @@ function goTo(loc) {
   if (!Number.isFinite(lz)) return 'could not read the zoom';
   const cam = Camera.fromDecimal(loc.xs, loc.ys, clampLogZoom(lz));
   if (!cam) return 'could not read the coordinate';
+  if (loc.c) state.julia = loc.c;
+  else if (loc.set === 'julia' && state.set !== 'julia') state.julia = { ...SETS.julia.c };
   if (loc.set && loc.set !== state.set) showViewer(loc.set);
+  else showJuliaUi();
   state.cam = cam;
   requestRender();
   return null;
@@ -277,6 +313,62 @@ goto.form.addEventListener('submit', (e) => {
 $('#goto-cancel').addEventListener('click', closeGoto);
 hud.c.addEventListener('click', openGoto);
 hud.zoom.addEventListener('click', openGoto);
+
+// ---------- Julia's parameter ----------
+
+// The panel only means anything for Julia, so it is hidden everywhere else.
+function showJuliaUi() {
+  const on = state.set === 'julia';
+  juliaUi.panel.hidden = !on;
+  juliaUi.label.hidden = !on;
+  if (!on) return;
+  juliaUi.re.value = state.julia.re;
+  juliaUi.im.value = state.julia.im;
+  juliaUi.label.textContent = `C = ${juliaText(state.julia)}`;
+  juliaUi.error.textContent = '';
+}
+
+// Applies what is in the two inputs. Bad input keeps the old C and says so.
+// Putting the old text back raises a second change event, so the unchanged
+// case is left alone: only editing or a new C clears the message.
+function applyJulia(re, im) {
+  const c = readC(re, im);
+  if (!c) {
+    juliaUi.error.textContent = 'could not read that';
+    juliaUi.re.value = state.julia.re;
+    juliaUi.im.value = state.julia.im;
+    return;
+  }
+  if (c.re === state.julia.re && c.im === state.julia.im) return;
+  state.julia = c;
+  showJuliaUi();
+  requestRender();
+}
+
+const applyJuliaInputs = () => applyJulia(juliaUi.re.value, juliaUi.im.value);
+
+for (const el of [juliaUi.re, juliaUi.im]) {
+  el.addEventListener('change', applyJuliaInputs);
+  el.addEventListener('input', () => { juliaUi.error.textContent = ''; });
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyJuliaInputs();
+    }
+  });
+}
+
+juliaUi.presets.replaceChildren(
+  ...SETS.julia.presets.map((p) => {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'bookmark';
+    el.textContent = p.name;
+    el.title = `C = ${juliaText(p)}`;
+    el.addEventListener('click', () => applyJulia(p.re, p.im));
+    return el;
+  }),
+);
 
 // A coordinate pasted anywhere in the viewer goes straight there.
 window.addEventListener('paste', (e) => {
@@ -465,6 +557,7 @@ function showViewer(set, view) {
   viewer.hidden = false;
   closeGoto();
   $('#set-name').textContent = SETS[set].name;
+  showJuliaUi();
 
   hud.bookmarks.replaceChildren(
     ...SETS[set].bookmarks.map((b) => {
@@ -498,29 +591,35 @@ function showMenu() {
 }
 
 // The GL canvas draws each thumbnail, then a 2D canvas on the card copies it.
+// Each card shows the view its set opens at, Julia with its default C.
 function renderCards() {
   if (!renderer) return;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const home = new Camera(0, 0, 100);
   for (const card of document.querySelectorAll('.card')) {
+    const set = card.dataset.set;
+    const h = SETS[set].home;
+    const cam = new Camera(h.x, h.y, h.zoom);
     const c = card.querySelector('canvas');
     const cssW = c.clientWidth || 240;
     c.width = Math.round(cssW * dpr);
     c.height = Math.round(cssW * 0.75 * dpr);
     canvas.width = c.width;
     canvas.height = c.height;
-    renderer.renderAll({ set: card.dataset.set, cam: home, maxIter: iterationsFor(home.lz, 1, card.dataset.set) });
+    renderer.renderAll({ set, cam, maxIter: iterationsFor(cam.lz, 1, set), julia: SETS.julia.c });
     c.getContext('2d').drawImage(canvas, 0, 0);
   }
 }
 
 for (const card of document.querySelectorAll('.card')) {
-  card.addEventListener('click', () => showViewer(card.dataset.set, { x: 0, y: 0, zoom: 100 }));
+  card.addEventListener('click', () => {
+    state.julia = { ...SETS.julia.c };
+    showViewer(card.dataset.set, SETS[card.dataset.set].home);
+  });
 }
 
 // ---------- Boot ----------
 
-window.__fx = { state, showViewer, showMenu, renderCards, render, renderer, iterationsFor, Camera, parseLocation, parseZoom, goTo };
+window.__fx = { state, showViewer, showMenu, renderCards, render, renderer, iterationsFor, Camera, parseLocation, parseZoom, goTo, applyJulia };
 
 if (readHash()) {
   showViewer(state.set);
