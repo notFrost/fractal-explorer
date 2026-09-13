@@ -380,3 +380,13 @@ body.viewing { overflow: hidden; }
   .card { transition: none; }
   .card:hover, .card:focus-visible { animation: none; transform: scale(1.03); }
 }
+
+/* The portal link in the menu footer. */
+.foot-link {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px dotted var(--dim);
+}
+
+.foot-link:hover,
+.foot-link:focus-visible { color: var(--magenta); border-color: var(--magenta); }

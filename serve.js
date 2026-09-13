@@ -19,20 +19,30 @@ const mime = {
 
 http
   .createServer((req, res) => {
-    let file = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-    if (file === '/') file = '/index.html';
+    const file = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    if (file === '/') {
+      res.writeHead(307, { Location: '/portal/' }).end();
+      return;
+    }
     const full = path.join(root, file);
     if (!full.startsWith(root)) {
       res.writeHead(403).end();
       return;
     }
-    fs.readFile(full, (err, data) => {
+    // Same shape as the deploy's trailingSlash: /app redirects to /app/,
+    // and a slashed path serves its index.html.
+    if (!file.endsWith('/') && fs.existsSync(full) && fs.statSync(full).isDirectory()) {
+      res.writeHead(308, { Location: `${file}/` }).end();
+      return;
+    }
+    const target = file.endsWith('/') ? path.join(full, 'index.html') : full;
+    fs.readFile(target, (err, data) => {
       if (err) {
         res.writeHead(404).end('not found');
         return;
       }
       res.writeHead(200, {
-        'Content-Type': mime[path.extname(full)] || 'application/octet-stream',
+        'Content-Type': mime[path.extname(target)] || 'application/octet-stream',
         'Cache-Control': 'no-store',
       });
       res.end(data);
