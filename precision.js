@@ -280,6 +280,130 @@ export function webbOrbitBig(cx, cy, bits, maxIter, out, cont = null) {
   return { len: n, escaped: false, zr, zi, pr, pi };
 }
 
+// Burning Ship as the original writes it: z ← (|Re z| + i|Im z|)² + c̄, i.e.
+// Zr' = Zr² − Zi² + Cr, Zi' = 2|Zr||Zi| − Ci. The conjugate is what stands the
+// ship upright on a y-up stage. Z_0 = 0 as in Mandelbrot. Texel: (Z, 0, 0).
+export function shipOrbitDouble(cx, cy, maxIter, out) {
+  let zr = 0;
+  let zi = 0;
+  out[0] = 0;
+  out[1] = 0;
+  let n = 1;
+  for (let i = 0; i < maxIter; i++) {
+    const nr = zr * zr - zi * zi + cx;
+    zi = 2 * Math.abs(zr) * Math.abs(zi) - cy;
+    zr = nr;
+    out[STRIDE * n] = zr;
+    out[STRIDE * n + 1] = zi;
+    n++;
+    if (zr * zr + zi * zi > 1e10) return { len: n, escaped: true };
+  }
+  return { len: n, escaped: false, zr, zi };
+}
+
+export function shipOrbitBig(cx, cy, bits, maxIter, out, cont = null) {
+  const B = BigInt(bits);
+  const bail = 10_000_000_000n << (2n * B);
+  let zr = cont ? cont.zr : 0n;
+  let zi = cont ? cont.zi : 0n;
+  let n = cont ? cont.len : 1;
+  if (!cont) {
+    out[0] = 0;
+    out[1] = 0;
+  }
+  const shift = bits > 60 ? BigInt(bits - 60) : 0n;
+  const div = bits > 60 ? B60 : 2 ** bits;
+  while (n < maxIter + 1) {
+    const nr = ((zr * zr - zi * zi) >> B) + cx;
+    const ar = zr < 0n ? -zr : zr;
+    const ai = zi < 0n ? -zi : zi;
+    zi = ((ar * ai) >> (B - 1n)) - cy;
+    zr = nr;
+    out[STRIDE * n] = Number(zr >> shift) / div;
+    out[STRIDE * n + 1] = Number(zi >> shift) / div;
+    n++;
+    if (zr * zr + zi * zi > bail) return { len: n, escaped: true };
+  }
+  return { len: n, escaped: false, zr, zi };
+}
+
+// Julia: z ← z² + C with C fixed and the pixel supplying z_0. Two orbits under
+// the same C go into the texture back to back: the critical orbit (Z_0 = 0) at
+// texels [0, split), then the view-centre orbit at [split, texels). A pixel
+// follows the centre orbit until its own orbit passes closer to the origin than
+// its delta — the step where (2Z + d)d would cancel — and from there follows
+// the critical orbit, whose Z_0 = 0 makes rebasing onto it exact.
+//
+// `len` is the shorter of the two orbits, counting an escaped one as complete,
+// so the cache test in ensureReference stays honest. Extending in place would
+// have to shift the second orbit, so these ignore `cont` and start over.
+function juliaRunDouble(z0r, z0i, cr, ci, maxIter, out, at) {
+  let zr = z0r;
+  let zi = z0i;
+  out[STRIDE * at] = zr;
+  out[STRIDE * at + 1] = zi;
+  let n = 1;
+  for (let i = 0; i < maxIter; i++) {
+    const nr = zr * zr - zi * zi + cr;
+    zi = 2 * zr * zi + ci;
+    zr = nr;
+    out[STRIDE * (at + n)] = zr;
+    out[STRIDE * (at + n) + 1] = zi;
+    n++;
+    if (zr * zr + zi * zi > 1e10) return { len: n, escaped: true };
+  }
+  return { len: n, escaped: false };
+}
+
+function juliaRunBig(z0r, z0i, cr, ci, bits, maxIter, out, at) {
+  const B = BigInt(bits);
+  const bail = 10_000_000_000n << (2n * B);
+  const shift = bits > 60 ? BigInt(bits - 60) : 0n;
+  const div = bits > 60 ? B60 : 2 ** bits;
+  const f = (v) => Number(v >> shift) / div;
+  let zr = z0r;
+  let zi = z0i;
+  out[STRIDE * at] = f(zr);
+  out[STRIDE * at + 1] = f(zi);
+  let n = 1;
+  for (let i = 0; i < maxIter; i++) {
+    const nr = ((zr * zr - zi * zi) >> B) + cr;
+    zi = ((zr * zi) >> (B - 1n)) + ci;
+    zr = nr;
+    out[STRIDE * (at + n)] = f(zr);
+    out[STRIDE * (at + n) + 1] = f(zi);
+    n++;
+    if (zr * zr + zi * zi > bail) return { len: n, escaped: true };
+  }
+  return { len: n, escaped: false };
+}
+
+function juliaPack(crit, centre, maxIter) {
+  const full = maxIter + 1;
+  return {
+    len: Math.min(crit.escaped ? full : crit.len, centre.escaped ? full : centre.len),
+    escaped: crit.escaped && centre.escaped,
+    split: crit.len,
+    texels: crit.len + centre.len,
+  };
+}
+
+export function juliaOrbitDouble(cx, cy, maxIter, out, p) {
+  const cr = Number(p.re);
+  const ci = Number(p.im);
+  const crit = juliaRunDouble(0, 0, cr, ci, maxIter, out, 0);
+  const centre = juliaRunDouble(cx, cy, cr, ci, maxIter, out, crit.len);
+  return juliaPack(crit, centre, maxIter);
+}
+
+export function juliaOrbitBig(cx, cy, bits, maxIter, out, cont, p) {
+  const cr = parseDecimal(String(p.re), bits) ?? 0n;
+  const ci = parseDecimal(String(p.im), bits) ?? 0n;
+  const crit = juliaRunBig(0n, 0n, cr, ci, bits, maxIter, out, 0);
+  const centre = juliaRunBig(cx, cy, cr, ci, bits, maxIter, out, crit.len);
+  return juliaPack(crit, centre, maxIter);
+}
+
 // Collatz: z ← 3z + 1 when floor|z| is odd, z / 2 when even. Both branches are
 // affine, so 3z + 1 is exact in fixed point and z / 2 drops one bit. Two texels
 // per step: (Z, log2 lo, log2 hi) and (parity, 0, 0, 0), where lo and hi are the
@@ -362,9 +486,13 @@ export function collatzOrbitBig(cx, cy, bits, maxIter, out) {
 }
 
 // Per-set orbit functions, texels per step, and the iteration count a budget
-// maps to (Collatz colours after two steps and gives up after 500).
+// maps to (Collatz colours after two steps and gives up after 500). An orbit
+// may also report `texels` when its footprint is not len × stride, as Julia's
+// pair of orbits does.
 export const ORBITS = {
   mandelbrot: { double: referenceOrbitDouble, big: referenceOrbitBig, stride: 1, iters: (n) => n },
   webb: { double: webbOrbitDouble, big: webbOrbitBig, stride: 1, iters: (n) => n },
   collatz: { double: null, big: collatzOrbitBig, stride: 2, iters: (n) => Math.min(n, COLLATZ_STEPS) },
+  julia: { double: juliaOrbitDouble, big: juliaOrbitBig, stride: 2, iters: (n) => n },
+  burningship: { double: shipOrbitDouble, big: shipOrbitBig, stride: 1, iters: (n) => n },
 };

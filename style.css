@@ -89,7 +89,7 @@ button {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1.5rem;
   align-content: center;
 }
@@ -195,7 +195,6 @@ body.viewing { overflow: hidden; }
 }
 
 .set-name {
-  margin-right: auto;
   font-family: var(--display);
   font-stretch: condensed;
   font-weight: 700;
@@ -203,6 +202,14 @@ body.viewing { overflow: hidden; }
   font-size: 1.25rem;
   letter-spacing: 0.04em;
 }
+
+/* Julia's parameter, next to the set name so it survives a screenshot. */
+.set-c {
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+
+.set-c[hidden] { display: none; }
 
 .btn {
   padding: 0.45rem 0.8rem;
@@ -259,7 +266,8 @@ body.viewing { overflow: hidden; }
 
 .hud-edit:hover { border-color: var(--dim); }
 
-.goto {
+.goto,
+.julia {
   display: grid;
   gap: 0.35rem;
   margin-top: 0.5rem;
@@ -267,7 +275,12 @@ body.viewing { overflow: hidden; }
   border-top: 1px solid var(--line);
 }
 
-.goto[hidden] { display: none; }
+.goto[hidden],
+.julia[hidden] { display: none; }
+
+/* Julia's C: two inputs and the named parameters from the original. */
+.julia .hud-bookmarks { margin-top: 0.15rem; }
+.julia .goto-error:empty { display: none; }
 
 .goto-row {
   display: grid;
