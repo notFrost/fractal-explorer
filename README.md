@@ -23,9 +23,10 @@ with WebGL2.
 
 The site is two pages. `/portal/` is the home: a list of links to the
 explorer, the two repos, and the notes. `/` redirects there. `/app/` is the
-explorer itself. Share links used to point at the root, so the portal reads
-the hash on load and forwards anything shaped like `#mandelbrot@x,y,zoom` to
-`/app/`.
+explorer itself. Both take their look from `design/`, one folder of plain CSS:
+tokens, base, chrome. See `design/README.md`. Share links used to point at the
+root, so the portal reads the hash on load and forwards anything shaped like
+`#mandelbrot@x,y,zoom` to `/app/`.
 
 ## Controls
 
