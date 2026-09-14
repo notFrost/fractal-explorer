@@ -1,0 +1,126 @@
+/* Shared chrome: the page shell and the handful of controls every page
+   uses. Layout that belongs to one page stays in that page's own sheet. */
+
+/* ---------- Page shell ---------- */
+
+.page {
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 2rem;
+  padding: clamp(1.25rem, 4vw, 3rem);
+}
+
+.page[hidden] { display: none; }
+
+.page-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: end;
+  gap: 2rem;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--display);
+  font-stretch: condensed;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: clamp(3.5rem, 12vw, 9rem);
+  line-height: 0.85;
+  letter-spacing: -0.03em;
+}
+
+.lede {
+  margin: 0 0 0.35em;
+  max-width: 34ch;
+  color: var(--dim);
+}
+
+.page-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  color: var(--dim);
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+
+/* Narrow screens: the lede goes under the title instead of beside it. */
+@media (max-width: 720px) {
+  .page-head { grid-template-columns: 1fr; gap: 1rem; align-items: start; }
+}
+
+/* ---------- Controls ---------- */
+
+/* Translucent surface for anything floating over a canvas. */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  backdrop-filter: var(--glass);
+}
+
+.btn {
+  padding: 0.45rem 0.8rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  backdrop-filter: var(--glass);
+}
+
+.btn:hover { border-color: var(--dim); }
+
+.btn-accent {
+  border-color: var(--magenta);
+  color: var(--magenta);
+}
+
+.btn-accent:hover {
+  background: var(--magenta);
+  color: #000;
+}
+
+/* Toggle chip with a colour swatch. Pressed state via aria-pressed. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.1rem 0.4rem 0.1rem 0.25rem;
+  color: var(--dim);
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+
+.chip-swatch {
+  width: 1.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.chip:hover { color: var(--ink); border-color: var(--dim); }
+.chip[aria-pressed="true"] { color: var(--ink); border-color: var(--magenta); }
+
+.input {
+  font: inherit;
+  color: var(--ink);
+  background: #000;
+  border: 1px solid var(--line);
+  padding: 0.3rem 0.45rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.input:focus { outline: none; border-color: var(--magenta); }
+.input::placeholder { color: var(--dim); }
+
+/* ---------- Motion ---------- */
+
+/* The original rocked hovered buttons a couple of degrees either way.
+   The element sets --wobble-scale and --wobble-tilt; see menu.css. */
+@keyframes wobble {
+  0%   { transform: scale(var(--wobble-scale, 1)) rotate(0deg); }
+  25%  { transform: scale(var(--wobble-scale, 1)) rotate(var(--wobble-tilt, 2deg)); }
+  75%  { transform: scale(var(--wobble-scale, 1)) rotate(calc(-1 * var(--wobble-tilt, 2deg))); }
+  100% { transform: scale(var(--wobble-scale, 1)) rotate(0deg); }
+}

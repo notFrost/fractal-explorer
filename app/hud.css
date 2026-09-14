@@ -1,0 +1,85 @@
+/* HUD: coordinates, zoom, colourway, bookmarks, and the go-to and Julia
+   forms. The panel surface, chips and inputs come from design/chrome.css. */
+
+.hud {
+  position: absolute;
+  left: 0.75rem;
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
+  padding: 0.6rem 0.8rem;
+  display: grid;
+  gap: 0.15rem;
+  max-width: min(calc(100vw - 1.5rem), 52ch);
+}
+
+.hud-row { white-space: normal; overflow-wrap: anywhere; }
+.hud-c { font-size: 1.1rem; word-break: break-all; max-width: 44ch; }
+.hud-k { color: var(--dim); display: inline-block; min-width: 4ch; }
+.hud-dim { color: var(--dim); }
+
+.hud-bookmarks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.hud-bookmarks:empty { display: none; }
+
+/* Colourway chips: each group is its name with the chips underneath. */
+.palette-groups { display: grid; gap: 0.3rem; margin-top: 0.35rem; }
+.palette-group { display: grid; gap: 0.1rem; }
+.palette-group-name { color: var(--dim); }
+.palette-chips { display: flex; flex-wrap: wrap; gap: 0.15rem 0.5rem; }
+
+/* The coordinate and zoom lines open the go-to form. */
+.hud-edit {
+  text-align: left;
+  border-bottom: 1px dotted transparent;
+  cursor: text;
+}
+
+.hud-edit:hover { border-color: var(--dim); }
+
+.goto,
+.julia {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.goto[hidden],
+.julia[hidden] { display: none; }
+
+/* Julia's C: two inputs and the named parameters from the original. */
+.julia .hud-bookmarks { margin-top: 0.15rem; }
+.julia .goto-error:empty { display: none; }
+
+.goto-row {
+  display: grid;
+  grid-template-columns: 4ch 1fr;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.goto-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.15rem;
+}
+
+.goto-error { color: var(--magenta); }
+
+.bookmark {
+  color: var(--dim);
+  border-bottom: 1px dotted var(--dim);
+}
+
+.bookmark:hover { color: var(--magenta); border-color: var(--magenta); }
+
+@media (max-width: 720px) {
+  .hud { max-width: calc(100vw - 1.5rem); }
+  .hud-c { font-size: 0.9rem; }
+}

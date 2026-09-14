@@ -1,0 +1,21 @@
+/* Design tokens: the one place colours, type and motion are defined.
+   Every sheet reads these; none redefines them. A toy that wants its own
+   mood overrides a token on :root in its own sheet, after this one.
+
+   Palette lifted from the original: black backdrop, pen base #0400ff,
+   and the magenta the escape gradient starts at. */
+:root {
+  --bg: #000000;
+  --ink: #ece8f4;
+  --dim: #6b6680;
+  --line: #1d1b2a;
+  --panel: rgba(8, 7, 14, 0.82);
+  --blue: #0400ff;
+  --magenta: #ff2bd6;
+
+  --display: "Bahnschrift", "Avenir Next Condensed", "Arial Narrow", "Roboto Condensed", "Helvetica Neue", system-ui, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+
+  --glass: blur(6px);
+  --motion: 220ms ease;
+}
