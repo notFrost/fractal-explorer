@@ -21,6 +21,9 @@
 
     <p id="gpu-error" class="gpu-error" hidden></p>
 
+    <!-- A formula too long for its card wraps. The &nbsp; runs glue each
+         bracketed group together, so the break lands on a top-level operator
+         rather than splitting Im z down the middle. -->
     <ul class="cards" id="cards" aria-label="Fractal sets">
       <li>
         <button class="card" data-set="mandelbrot" type="button">
@@ -54,14 +57,14 @@
         <button class="card" data-set="burningship" type="button">
           <canvas class="card-canvas" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">Burning Ship</span>
-          <span class="card-formula">z ← (|Re z| + i|Im z|)² + c̄</span>
+          <span class="card-formula">z ← (|Re&nbsp;z|&nbsp;+&nbsp;i|Im&nbsp;z|)² + c̄</span>
         </button>
       </li>
       <li>
         <button class="card" data-set="mandelbug" type="button">
           <canvas class="card-canvas" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">MandelBug</span>
-          <span class="card-formula">z ← Re(z²) + 2i(Re z + Im z) + c</span>
+          <span class="card-formula">z ← Re(z²) + 2i(Re&nbsp;z&nbsp;+&nbsp;Im&nbsp;z) + c</span>
         </button>
       </li>
     </ul>

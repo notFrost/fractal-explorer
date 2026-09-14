@@ -123,9 +123,13 @@ button {
   letter-spacing: 0.02em;
 }
 
+/* Runs of spaces line the formulas up, so pre-wrap rather than normal. Without
+   min-width the longest formula sets a min-content floor wider than the 200px
+   column, and the card's canvas stretches past its neighbours'. */
 .card-formula {
   color: var(--dim);
-  white-space: pre;
+  white-space: pre-wrap;
+  min-width: 0;
 }
 
 .card:hover,
