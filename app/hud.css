@@ -3,8 +3,6 @@
 
 .hud {
   position: absolute;
-  /* Above the help line, which wraps across the bottom edge. Below the
-     portal link at 2. */
   z-index: 1;
   left: 0.75rem;
   bottom: max(0.75rem, env(safe-area-inset-bottom));
@@ -14,8 +12,6 @@
   max-width: min(calc(100vw - 1.5rem), 52ch);
 }
 
-/* The rows live in their own grid so one hidden attribute folds the lot.
-   The toggle sits below them, pinned to the corner, so it never moves. */
 .hud-body {
   display: grid;
   gap: 0.15rem;
@@ -32,7 +28,6 @@
 
 .hud-toggle:hover { color: var(--ink); border-color: var(--dim); }
 
-/* Folded away, the panel is just its toggle: shrink the surface to match. */
 .hud.collapsed { padding: 0.35rem 0.6rem; }
 .hud.collapsed .hud-toggle { margin-top: 0; }
 

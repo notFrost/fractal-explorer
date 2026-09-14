@@ -330,8 +330,6 @@ hud.zoom.addEventListener('click', openGoto);
 
 // ---------- Folding the HUD away ----------
 
-// The panel covers a corner of the canvas, so it folds down to just its
-// toggle. Collapsed is remembered for the session, not in the URL.
 let hudOpen = true;
 
 function setHud(open) {
