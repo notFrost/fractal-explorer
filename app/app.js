@@ -599,7 +599,9 @@ hud.palettes.replaceChildren(
     const name = document.createElement('span');
     name.className = 'palette-group-name';
     name.textContent = group;
-    g.append(name, ...palettes.map((p) => {
+    const chips = document.createElement('div');
+    chips.className = 'palette-chips';
+    chips.append(...palettes.map((p) => {
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'chip';
@@ -613,6 +615,7 @@ hud.palettes.replaceChildren(
       chip.addEventListener('click', () => setPalette(p.key));
       return chip;
     }));
+    g.append(name, chips);
     return g;
   }),
 );

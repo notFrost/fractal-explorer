@@ -273,11 +273,11 @@ body.viewing { overflow: hidden; }
 
 .hud-bookmarks:empty { display: none; }
 
-/* Colourway chips, one row per group. */
-.hud-palette { display: flex; gap: 0.4rem; align-items: baseline; margin-top: 0.35rem; }
-.palette-groups { display: grid; gap: 0.2rem; }
-.palette-group { display: flex; flex-wrap: wrap; gap: 0.15rem 0.5rem; align-items: center; }
-.palette-group-name { color: var(--dim); min-width: 12ch; }
+/* Colourway chips: each group is its name with the chips underneath. */
+.palette-groups { display: grid; gap: 0.3rem; margin-top: 0.35rem; }
+.palette-group { display: grid; gap: 0.1rem; }
+.palette-group-name { color: var(--dim); }
+.palette-chips { display: flex; flex-wrap: wrap; gap: 0.15rem 0.5rem; }
 
 .chip {
   display: inline-flex;
