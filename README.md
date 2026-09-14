@@ -39,6 +39,7 @@ root, so the portal reads the hash on load and forwards anything shaped like
 | Back to menu | Esc | Menu button |
 | Go to a location | G, or paste | click the coordinate or zoom in the HUD |
 | Colourway | `,` and `.` | the chips in the HUD |
+| Fold the HUD away | H | the `hud` toggle under the panel |
 
 The URL hash stores the set, centre, and zoom with as many digits as the zoom
 needs, so any view can be bookmarked or shared. Julia adds two fields for its

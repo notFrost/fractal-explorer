@@ -22,6 +22,9 @@ const menu = $('#menu');
 const viewer = $('#viewer');
 const canvas = $('#view');
 const hud = {
+  panel: $('.hud'),
+  body: $('#hud-body'),
+  toggle: $('#hud-toggle'),
   palettes: $('#palettes'),
   c: $('#hud-c'),
   zoom: $('#hud-zoom'),
@@ -294,6 +297,7 @@ function goTo(loc) {
 function openGoto() {
   if (mode !== 'view') return;
   keys.clear();
+  setHud(true);
   const c = state.cam;
   goto.x.value = c.xString();
   goto.y.value = c.yString();
@@ -323,6 +327,22 @@ goto.form.addEventListener('submit', (e) => {
 $('#goto-cancel').addEventListener('click', closeGoto);
 hud.c.addEventListener('click', openGoto);
 hud.zoom.addEventListener('click', openGoto);
+
+// ---------- Folding the HUD away ----------
+
+let hudOpen = true;
+
+function setHud(open) {
+  hudOpen = open;
+  hud.body.hidden = !open;
+  hud.panel.classList.toggle('collapsed', !open);
+  hud.toggle.setAttribute('aria-expanded', String(open));
+  hud.toggle.textContent = open ? '▾ hud' : '▸ hud';
+  hud.toggle.title = open ? 'Hide the panel (H)' : 'Show the panel (H)';
+  if (!open) closeGoto();
+}
+
+hud.toggle.addEventListener('click', () => setHud(!hudOpen));
 
 // ---------- Julia's parameter ----------
 
@@ -466,6 +486,7 @@ window.addEventListener('keydown', (e) => {
   if (k === ']') changeDetail(1);
   if (k === ',') stepPalette(-1);
   if (k === '.') stepPalette(1);
+  if (k === 'h') setHud(!hudOpen);
   if (k === 'g') { e.preventDefault(); openGoto(); }
 });
 

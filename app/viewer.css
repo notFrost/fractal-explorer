@@ -75,6 +75,7 @@ body.viewing { overflow: hidden; }
   margin: 0;
   color: var(--dim);
   text-align: right;
+  pointer-events: none;
 }
 
 /* Control bar: iteration detail down/up and screenshot. Same on every device. */
