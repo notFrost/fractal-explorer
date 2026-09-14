@@ -1,6 +1,7 @@
 import { SETS, MIN_LOG_ZOOM, iterationsFor } from './fractals.js';
 import { Camera } from './precision.js';
 import { Renderer } from './gpu.js';
+import { mountColourways } from './prototype-colourways.js'; // PROTOTYPE colourways
 
 // ---------- State ----------
 
@@ -586,7 +587,7 @@ function showMenu() {
   viewer.hidden = true;
   menu.hidden = false;
   clearTimeout(hashTimer);
-  history.replaceState(null, '', location.pathname);
+  history.replaceState(null, '', location.pathname + location.search); // PROTOTYPE colourways: keep ?variant=
   renderCards();
 }
 
@@ -620,6 +621,9 @@ for (const card of document.querySelectorAll('.card')) {
 // ---------- Boot ----------
 
 window.__fx = { state, showViewer, showMenu, renderCards, render, renderer, iterationsFor, Camera, parseLocation, parseZoom, goTo, applyJulia };
+
+// PROTOTYPE colourways: the bar sets renderer.palette, then re-renders the screen that is up.
+mountColourways({ renderer, onChange: () => (mode === 'view' ? requestRender() : renderCards()) });
 
 if (readHash()) {
   showViewer(state.set);
