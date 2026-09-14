@@ -37,11 +37,14 @@ the hash on load and forwards anything shaped like `#mandelbrot@x,y,zoom` to
 | Save PNG at twice screen size | Space | the camera button |
 | Back to menu | Esc | Menu button |
 | Go to a location | G, or paste | click the coordinate or zoom in the HUD |
+| Colourway | `,` and `.` | the chips in the HUD |
 
 The URL hash stores the set, centre, and zoom with as many digits as the zoom
 needs, so any view can be bookmarked or shared. Julia adds two fields for its
 parameter: `#julia@x,y,zoom,re,im`. Its `C` has its own inputs in the HUD,
-with the original's four named parameters as chips.
+with the original's four named parameters as chips. A colourway other than
+Pen rides along as `?palette=classic` before the hash, and the last pick is
+remembered per browser.
 
 The go-to form takes the real and imaginary parts and a zoom (`1e12`,
 `2^1000`, `10^301`), or one pasted line in any of these shapes: a share link
@@ -132,8 +135,13 @@ cancel, and `Z₀ = 0`, so its rebasing is used unchanged. The set is unbounded:
 every `c` on the line `Im c = −Re c` is its own fixed point, so the whole line
 belongs to it. The menu opens on the bulk instead, around `−0.97 + 0.97i`.
 
-**Colour** is the original pen mapping: hue `(t + 90) mod 100` on a 0..100
-wheel, brightness `t × 5` clamped, inside points black.
+**Colour** is one of seven colourways, all cycling on the original's
+100-iteration period with inside points black. Pen is the original pen
+mapping: hue `(t + 90) mod 100` on a 0..100 wheel, brightness `t × 5`
+clamped. Classic is the navy, blue, white and orange ramp of the well-known
+Ultra Fractal renders. Abyss, Ember and Ultraviolet are five-stop gradients,
+the first two folded so they cycle without a seam. Ink and Chalk have no hue:
+contour bands every eight iterations, dark on paper or pale on slate.
 
 **Timing** in the HUD sums `EXT_disjoint_timer_query_webgl2` queries across
 the strips of one frame. `ref` is the CPU time for the reference orbit when it
