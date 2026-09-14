@@ -273,6 +273,32 @@ body.viewing { overflow: hidden; }
 
 .hud-bookmarks:empty { display: none; }
 
+/* Colourway chips: each group is its name with the chips underneath. */
+.palette-groups { display: grid; gap: 0.3rem; margin-top: 0.35rem; }
+.palette-group { display: grid; gap: 0.1rem; }
+.palette-group-name { color: var(--dim); }
+.palette-chips { display: flex; flex-wrap: wrap; gap: 0.15rem 0.5rem; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.1rem 0.4rem 0.1rem 0.25rem;
+  color: var(--dim);
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+
+.chip-swatch {
+  width: 1.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.chip:hover { color: var(--ink); border-color: var(--dim); }
+.chip[aria-pressed="true"] { color: var(--ink); border-color: var(--magenta); }
+
 /* The coordinate and zoom lines open the go-to form. */
 .hud-edit {
   text-align: left;

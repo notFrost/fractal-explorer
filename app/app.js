@@ -1,6 +1,7 @@
 import { SETS, MIN_LOG_ZOOM, iterationsFor } from './fractals.js';
 import { Camera } from './precision.js';
 import { Renderer } from './gpu.js';
+import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palettes.js';
 
 // ---------- State ----------
 
@@ -11,6 +12,9 @@ const state = {
   // Julia's parameter, kept as the strings the user typed so the hash
   // round-trips them exactly.
   julia: { ...SETS.julia.c },
+  // Colourway key, see palettes.js. Rides in the URL as ?palette= and is
+  // remembered per browser.
+  palette: DEFAULT_PALETTE,
 };
 
 const $ = (s) => document.querySelector(s);
@@ -18,6 +22,7 @@ const menu = $('#menu');
 const viewer = $('#viewer');
 const canvas = $('#view');
 const hud = {
+  palettes: $('#palettes'),
   c: $('#hud-c'),
   zoom: $('#hud-zoom'),
   iter: $('#hud-iter'),
@@ -214,7 +219,8 @@ function savePng() {
   renderer.renderAll(viewNow(maxIter));
   const c = state.cam;
   const j = state.set === 'julia' ? `_C${state.julia.re}_${state.julia.im}i` : '';
-  const name = `${state.set}${j}_${c.xString().slice(0, 24)}_${c.yString().slice(0, 24)}_${c.zoomString()}x.png`;
+  const pal = state.palette === DEFAULT_PALETTE ? '' : `_${state.palette}`;
+  const name = `${state.set}${j}_${c.xString().slice(0, 24)}_${c.yString().slice(0, 24)}_${c.zoomString()}x${pal}.png`;
   canvas.toBlob((blob) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -256,7 +262,10 @@ const LINK = new RegExp(
 function parseLocation(text) {
   const t = String(text).trim().replace(/[−–]/g, '-');
   let m = LINK.exec(t);
-  if (m) return { set: m[1].toLowerCase(), xs: m[2], ys: m[3], lz: parseZoom(m[4]), c: readC(m[5], m[6]) };
+  if (m) {
+    const pal = /[?&]palette=(\w+)/i.exec(t);
+    return { set: m[1].toLowerCase(), xs: m[2], ys: m[3], lz: parseZoom(m[4]), c: readC(m[5], m[6]), palette: pal?.[1] };
+  }
   m = COMPLEX.exec(t);
   if (m) return { xs: m[1], ys: m[2] + m[3].replace(/^[-+]/, ''), lz: m[4] ? parseZoom(m[4]) : undefined };
   const parts = t.split(/[,\s;]+/).filter(Boolean);
@@ -274,6 +283,7 @@ function goTo(loc) {
   if (!cam) return 'could not read the coordinate';
   if (loc.c) state.julia = loc.c;
   else if (loc.set === 'julia' && state.set !== 'julia') state.julia = { ...SETS.julia.c };
+  if (loc.palette && paletteByKey(loc.palette)) setPalette(loc.palette, { render: false });
   if (loc.set && loc.set !== state.set) showViewer(loc.set);
   else showJuliaUi();
   state.cam = cam;
@@ -454,6 +464,8 @@ window.addEventListener('keydown', (e) => {
   if (k === 'escape') (goto.form.hidden ? showMenu : closeGoto)();
   if (k === '[') changeDetail(-1);
   if (k === ']') changeDetail(1);
+  if (k === ',') stepPalette(-1);
+  if (k === '.') stepPalette(1);
   if (k === 'g') { e.preventDefault(); openGoto(); }
 });
 
@@ -540,6 +552,74 @@ $('#save').addEventListener('click', savePng);
 $('#back').addEventListener('click', showMenu);
 window.addEventListener('resize', () => { if (mode === 'view') requestRender(); });
 
+// ---------- Colourways ----------
+
+const PALETTE_STORE = 'palette';
+
+// Applies a colourway: shader, chips, URL and the browser's memory of it.
+// The URL drops the parameter for the default so plain links stay short.
+function setPalette(key, { render = true } = {}) {
+  const p = paletteByKey(key);
+  if (!p) return;
+  state.palette = p.key;
+  if (renderer) renderer.palette = p.index;
+  for (const chip of hud.palettes.querySelectorAll('.chip')) {
+    chip.setAttribute('aria-pressed', String(chip.dataset.palette === p.key));
+  }
+  try { localStorage.setItem(PALETTE_STORE, p.key); } catch { /* private mode */ }
+  const url = new URL(location.href);
+  if (p.key === DEFAULT_PALETTE) url.searchParams.delete('palette');
+  else url.searchParams.set('palette', p.key);
+  history.replaceState(null, '', url);
+  if (!render) return;
+  if (mode === 'view') requestRender();
+  else renderCards();
+}
+
+function stepPalette(dir) {
+  const i = PALETTES.findIndex((p) => p.key === state.palette);
+  setPalette(PALETTES[(i + dir + PALETTES.length) % PALETTES.length].key);
+}
+
+// The link wins, then the browser's memory, then the default.
+function initialPalette() {
+  const fromLink = new URLSearchParams(location.search).get('palette');
+  if (fromLink && paletteByKey(fromLink)) return fromLink;
+  try {
+    const stored = localStorage.getItem(PALETTE_STORE);
+    if (stored && paletteByKey(stored)) return stored;
+  } catch { /* private mode */ }
+  return DEFAULT_PALETTE;
+}
+
+hud.palettes.replaceChildren(
+  ...PALETTE_GROUPS.map(({ group, palettes }) => {
+    const g = document.createElement('div');
+    g.className = 'palette-group';
+    const name = document.createElement('span');
+    name.className = 'palette-group-name';
+    name.textContent = group;
+    const chips = document.createElement('div');
+    chips.className = 'palette-chips';
+    chips.append(...palettes.map((p) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip';
+      chip.dataset.palette = p.key;
+      chip.setAttribute('aria-pressed', 'false');
+      chip.title = `${p.name} colourway`;
+      const sw = document.createElement('i');
+      sw.className = 'chip-swatch';
+      sw.style.background = p.swatch;
+      chip.append(sw, document.createTextNode(p.name));
+      chip.addEventListener('click', () => setPalette(p.key));
+      return chip;
+    }));
+    g.append(name, chips);
+    return g;
+  }),
+);
+
 // ---------- Screens ----------
 
 // Bookmarks hold numbers for shallow spots and decimal strings for deep ones.
@@ -586,7 +666,7 @@ function showMenu() {
   viewer.hidden = true;
   menu.hidden = false;
   clearTimeout(hashTimer);
-  history.replaceState(null, '', location.pathname);
+  history.replaceState(null, '', location.pathname + location.search);
   renderCards();
 }
 
@@ -619,7 +699,9 @@ for (const card of document.querySelectorAll('.card')) {
 
 // ---------- Boot ----------
 
-window.__fx = { state, showViewer, showMenu, renderCards, render, renderer, iterationsFor, Camera, parseLocation, parseZoom, goTo, applyJulia };
+window.__fx = { state, showViewer, showMenu, renderCards, render, renderer, iterationsFor, Camera, parseLocation, parseZoom, goTo, applyJulia, setPalette };
+
+setPalette(initialPalette(), { render: false });
 
 if (readHash()) {
   showViewer(state.set);

@@ -5,7 +5,7 @@
   <script>
     // Old share links pointed at the root, so "/#mandelbrot@x,y,zoom" now lands
     // here. Hand it to the explorer before anything paints.
-    if (/^#\w+@/.test(location.hash)) location.replace('../app/' + location.hash);
+    if (/^#\w+@/.test(location.hash)) location.replace('../app/' + location.search + location.hash);
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Fractal Explorer</title>
