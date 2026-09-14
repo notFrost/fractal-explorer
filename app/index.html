@@ -86,33 +86,37 @@
       <span id="set-c" class="set-c" hidden></span>
     </div>
 
-    <aside class="hud panel" aria-live="polite">
-      <div class="hud-row hud-c"><span class="hud-k">c</span> <button id="hud-c" class="hud-edit" type="button" title="Edit the coordinate (G)">0 + 0i</button></div>
-      <div class="hud-row"><span class="hud-k">zoom</span> <button id="hud-zoom" class="hud-edit" type="button" title="Edit the zoom (G)">100×</button></div>
-      <div class="hud-row"><span class="hud-k">iter</span> <span id="hud-iter">200</span> <span class="hud-dim">detail ×<span id="hud-detail">1</span></span></div>
-      <div class="hud-row hud-dim"><span id="hud-status">idle</span></div>
-      <div id="palettes" class="hud-row palette-groups" aria-label="Colourway"></div>
+    <aside class="hud panel">
+      <div id="hud-body" class="hud-body" aria-live="polite">
+        <div class="hud-row hud-c"><span class="hud-k">c</span> <button id="hud-c" class="hud-edit" type="button" title="Edit the coordinate (G)">0 + 0i</button></div>
+        <div class="hud-row"><span class="hud-k">zoom</span> <button id="hud-zoom" class="hud-edit" type="button" title="Edit the zoom (G)">100×</button></div>
+        <div class="hud-row"><span class="hud-k">iter</span> <span id="hud-iter">200</span> <span class="hud-dim">detail ×<span id="hud-detail">1</span></span></div>
+        <div class="hud-row hud-dim"><span id="hud-status">idle</span></div>
+        <div id="palettes" class="hud-row palette-groups" aria-label="Colourway"></div>
 
-      <div id="julia-panel" class="julia" hidden>
-        <label class="goto-row"><span class="hud-k">re</span><input id="julia-re" class="input" type="text" spellcheck="false" aria-label="Real part of C" /></label>
-        <label class="goto-row"><span class="hud-k">im</span><input id="julia-im" class="input" type="text" spellcheck="false" aria-label="Imaginary part of C" /></label>
-        <div class="hud-bookmarks" id="julia-presets"></div>
-        <span id="julia-error" class="goto-error" role="alert"></span>
+        <div id="julia-panel" class="julia" hidden>
+          <label class="goto-row"><span class="hud-k">re</span><input id="julia-re" class="input" type="text" spellcheck="false" aria-label="Real part of C" /></label>
+          <label class="goto-row"><span class="hud-k">im</span><input id="julia-im" class="input" type="text" spellcheck="false" aria-label="Imaginary part of C" /></label>
+          <div class="hud-bookmarks" id="julia-presets"></div>
+          <span id="julia-error" class="goto-error" role="alert"></span>
+        </div>
+
+        <div class="hud-row hud-bookmarks" id="bookmarks"></div>
+
+        <form id="goto" class="goto" hidden autocomplete="off">
+          <label class="goto-row"><span class="hud-k">re</span><input id="goto-x" class="input" type="text" spellcheck="false" /></label>
+          <label class="goto-row"><span class="hud-k">im</span><input id="goto-y" class="input" type="text" spellcheck="false" /></label>
+          <label class="goto-row"><span class="hud-k">zoom</span><input id="goto-zoom" class="input" type="text" spellcheck="false" placeholder="1e12, 2^1000, 10^301" /></label>
+          <label class="goto-row"><span class="hud-k">any</span><input id="goto-any" class="input" type="text" spellcheck="false" placeholder="paste a link, “x, y, zoom” or “x + yi @ zoom”" /></label>
+          <div class="goto-actions">
+            <button type="submit" class="btn btn-accent">Go</button>
+            <button type="button" id="goto-cancel" class="btn">Cancel</button>
+            <span id="goto-error" class="goto-error" role="alert"></span>
+          </div>
+        </form>
       </div>
 
-      <div class="hud-row hud-bookmarks" id="bookmarks"></div>
-
-      <form id="goto" class="goto" hidden autocomplete="off">
-        <label class="goto-row"><span class="hud-k">re</span><input id="goto-x" class="input" type="text" spellcheck="false" /></label>
-        <label class="goto-row"><span class="hud-k">im</span><input id="goto-y" class="input" type="text" spellcheck="false" /></label>
-        <label class="goto-row"><span class="hud-k">zoom</span><input id="goto-zoom" class="input" type="text" spellcheck="false" placeholder="1e12, 2^1000, 10^301" /></label>
-        <label class="goto-row"><span class="hud-k">any</span><input id="goto-any" class="input" type="text" spellcheck="false" placeholder="paste a link, “x, y, zoom” or “x + yi @ zoom”" /></label>
-        <div class="goto-actions">
-          <button type="submit" class="btn btn-accent">Go</button>
-          <button type="button" id="goto-cancel" class="btn">Cancel</button>
-          <span id="goto-error" class="goto-error" role="alert"></span>
-        </div>
-      </form>
+      <button id="hud-toggle" class="hud-toggle" type="button" aria-expanded="true" aria-controls="hud-body" title="Hide the panel (H)">▾ hud</button>
     </aside>
 
     <div class="controls" aria-label="Controls">
@@ -123,7 +127,7 @@
       </button>
     </div>
 
-    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · [ ] detail · , . colour · G or paste to go somewhere · Space saves</p>
+    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · [ ] detail · , . colour · H folds the panel · G or paste to go somewhere · Space saves</p>
   </section>
 
   <script type="module" src="app.js"></script>

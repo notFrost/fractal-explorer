@@ -3,6 +3,9 @@
 
 .hud {
   position: absolute;
+  /* Above the help line, which wraps across the bottom edge. Below the
+     portal link at 2. */
+  z-index: 1;
   left: 0.75rem;
   bottom: max(0.75rem, env(safe-area-inset-bottom));
   padding: 0.6rem 0.8rem;
@@ -10,6 +13,28 @@
   gap: 0.15rem;
   max-width: min(calc(100vw - 1.5rem), 52ch);
 }
+
+/* The rows live in their own grid so one hidden attribute folds the lot.
+   The toggle sits below them, pinned to the corner, so it never moves. */
+.hud-body {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.hud-body[hidden] { display: none; }
+
+.hud-toggle {
+  justify-self: start;
+  margin-top: 0.35rem;
+  color: var(--dim);
+  border-bottom: 1px dotted transparent;
+}
+
+.hud-toggle:hover { color: var(--ink); border-color: var(--dim); }
+
+/* Folded away, the panel is just its toggle: shrink the surface to match. */
+.hud.collapsed { padding: 0.35rem 0.6rem; }
+.hud.collapsed .hud-toggle { margin-top: 0; }
 
 .hud-row { white-space: normal; overflow-wrap: anywhere; }
 .hud-c { font-size: 1.1rem; word-break: break-all; max-width: 44ch; }
