@@ -104,6 +104,14 @@ vec3 inkPalette(float t) {
   return shade * vec3(1.0, 0.97, 0.9);
 }
 
+// 6. Chalk: Ink inverted. Pale contour lines on slate, same eight-iteration bands.
+vec3 chalkPalette(float t) {
+  float band = fract(t / 8.0);
+  float edge = smoothstep(0.0, 0.08, band) * (1.0 - smoothstep(0.92, 1.0, band));
+  float shade = mix(0.92, 0.1, edge);
+  return shade * vec3(0.9, 0.95, 1.0);
+}
+
 vec3 palette(float t) {
   if (!(t > 0.0)) return vec3(0.0);
   if (u_palette == 1) return classicPalette(t);
@@ -111,6 +119,7 @@ vec3 palette(float t) {
   if (u_palette == 3) return abyssPalette(t);
   if (u_palette == 4) return ultravioletPalette(t);
   if (u_palette == 5) return inkPalette(t);
+  if (u_palette == 6) return chalkPalette(t);
   return penPalette(t);
 }
 

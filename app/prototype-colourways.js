@@ -10,6 +10,7 @@ export const VARIANTS = [
   { key: 'abyss', name: 'Abyss', note: 'deep sea → teal → sea green → foam → sand, folded', swatch: 'linear-gradient(90deg,#001219,#005f73 12%,#0a9396 25%,#94d2bd 37%,#e9d8a6 50%,#94d2bd 63%,#0a9396 75%,#005f73 88%,#001219)' },
   { key: 'ultraviolet', name: 'Ultraviolet', note: 'the site accents: pen blue → violet → magenta → pale pink', swatch: 'linear-gradient(90deg,#050014,#0400ff 20%,#7a00ff 45%,#ff2bd6 70%,#ffd6f5 90%,#050014)' },
   { key: 'ink', name: 'Ink', note: 'no hue: charcoal contour bands on paper', swatch: 'repeating-linear-gradient(90deg,#1f1e1a 0 6px,#ede8d9 6px 22px)' },
+  { key: 'chalk', name: 'Chalk', note: 'Ink inverted: pale contour lines on slate', swatch: 'repeating-linear-gradient(90deg,#e6ecf5 0 6px,#171a20 6px 22px)' },
 ];
 
 const CSS = `
@@ -67,7 +68,7 @@ export function mountColourways({ renderer, onChange }) {
     <span class="proto-swatch"></span>
     <span class="proto-label"><b class="proto-name"></b><span class="proto-note"></span></span>
     <button type="button" class="proto-next" title="Next colourway ( . )" aria-label="Next colourway">›</button>
-    <span class="proto-keys">, . cycle · 0–5 pick</span>`;
+    <span class="proto-keys">, . cycle · 0–6 pick</span>`;
   document.body.append(bar);
 
   const name = bar.querySelector('.proto-name');
@@ -96,7 +97,7 @@ export function mountColourways({ renderer, onChange }) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === ',') apply(i - 1);
     else if (e.key === '.') apply(i + 1);
-    else if (/^[0-5]$/.test(e.key)) apply(Number(e.key));
+    else if (/^[0-6]$/.test(e.key)) apply(Number(e.key));
     else return;
     e.preventDefault();
   });
