@@ -132,12 +132,6 @@ float smoothT(int steps, float logzz) {
 
 vec4 refAt(int i) { return texelFetch(u_ref, ivec2(i & 1023, i >> 10), 0); }
 
-// Mandelbrot's two largest interior components have closed forms: the main
-// cardioid and the period-2 bulb at −1. Points in either never escape, so they
-// are the ones that cost a full u_maxIter. SKIN holds the test clear of both
-// boundaries — u_center is float32, and a point called inside in error would
-// paint solid black over real structure. Being called outside in error only
-// costs the iterations we were trying to save.
 const float SKIN = 1e-5;
 
 bool inCardioidOrBulb(vec2 c) {
@@ -245,8 +239,6 @@ float escape(FE dc) {
 }
 
 void main() {
-  // Past 2^90 the screen is narrower than float32 can resolve, so every pixel
-  // shares one c and the test is really asking about the camera centre.
   if (inCardioidOrBulb(u_center)) {
     outColor = vec4(palette(0.0), 1.0);
     return;
@@ -922,8 +914,6 @@ export class Renderer {
       gl.uniform1f(prog.u.u_pxm, m);
       gl.uniform1i(prog.u.u_pxe, e);
       gl.uniform1f(prog.u.u_px, m * 2 ** e);
-      // Only Mandelbrot's shader reads this, to place a pixel against the
-      // cardioid; elsewhere the location is null and the call does nothing.
       gl.uniform2f(prog.u.u_center, cam.xDouble(), cam.yDouble());
       this.tier = tier;
     } else {
