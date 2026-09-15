@@ -208,4 +208,6 @@ other.
 - Main menu with a hover wobble, PNG download, iteration detail control.
 
 Not ported: the joystick and edge buttons of the original's mobile mode, and
-Scratch's base-10 log and NaN-to-0 quirks in the smooth colouring.
+Scratch's base-10 log and NaN-to-0 quirks in the smooth colouring. Note that
+while this project is technically a port, it's become significantly more
+powerful than the original and is a separate project in its own right.
