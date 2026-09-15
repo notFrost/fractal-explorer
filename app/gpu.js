@@ -7,7 +7,6 @@ import { SOURCES, SHADERS, COST } from './shaders/registry.js';
 const UNIFORMS = ['u_res', 'u_px', 'u_center', 'u_offset', 'u_pxm', 'u_pxe', 'u_maxIter', 'u_refLen', 'u_ref2', 'u_julia', 'u_ref', 'u_palette'];
 const REF_W = 1024;
 
-// Pixel-iterations per draw call. Keeps each call well under GPU watchdog limits.
 const STRIP_BUDGET = 2e9;
 
 function compile(gl, type, src) {
@@ -33,7 +32,7 @@ export class Renderer {
     });
     if (!this.gl) throw new Error('WebGL2 is not available in this browser.');
     this.lost = false;
-    this.palette = 0; // colourway index, see palettes.js
+    this.palette = 0;
     canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; });
     canvas.addEventListener('webglcontextrestored', () => { this.lost = false; this.setup(); });
     this.setup();
@@ -52,9 +51,6 @@ export class Renderer {
       this.customExpr = null;
       this.setCustom(expr);
     }
-    // One fixed-size texture and one staging buffer, reused for every reference.
-    // Room for two full-length orbits, which is what Julia stores; Collatz uses
-    // two texels per step but stops at 500.
     this.refRows = Math.ceil((2 * MAX_ITER + 4) / REF_W);
     this.refBuf = new Float32Array(REF_W * this.refRows * 4);
     this.refTex = gl.createTexture();
@@ -89,17 +85,11 @@ export class Renderer {
     this.customExpr = expr;
   }
 
-  // ---------- Reference orbit cache ----------
-
-  // Ensure the cached reference suits this view. Recomputes when the set
-  // changes, the camera moved more than two screens from the reference, the
-  // zoom needs more precision, or more iterations are needed than stored.
   ensureReference(view, iters, screenPx) {
     const { cam, set } = view;
     const orbit = ORBITS[set];
     const big = !orbit.double || cam.lz > BIG_LOG_ZOOM;
     const bits = big ? bitsFor(cam.lz) : 64;
-    // Julia's orbits depend on C as well as on the centre, so C keys the cache.
     const p = view.julia;
     const pkey = set === 'julia' ? `${p.re},${p.im}` : '';
     let ref = this.ref;
@@ -112,13 +102,11 @@ export class Renderer {
 
     const t0 = performance.now();
     if (reuse) {
-      // Extend the stored orbit.
       const r = ref.big
         ? orbit.big(ref.cam.x, ref.cam.y, ref.bits, iters, this.refBuf, ref, p)
         : orbit.double(ref.cam.xDouble(), ref.cam.yDouble(), iters, this.refBuf, p);
       Object.assign(ref, r);
     } else {
-      // Carry 64 spare bits so the orbit stays valid for 2^64 of further zoom.
       const c = cam.clone();
       if (big) c.setLogZoom(cam.lz + 64);
       const r = big
@@ -128,7 +116,6 @@ export class Renderer {
     }
     ref.iters = iters;
     ref.cpuMs = performance.now() - t0;
-    // An orbit that does not fill len × stride texels reports its own footprint.
     const rows = Math.ceil((ref.texels ?? ref.len * orbit.stride) / REF_W);
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.refTex);
@@ -137,11 +124,6 @@ export class Renderer {
     return ref;
   }
 
-  // ---------- Drawing ----------
-
-  // Prepare uniforms for a frame. view = { set, cam, maxIter }. `fresh` marks
-  // the first call of a frame; later calls re-issue uniforms between strips.
-  // Returns { strips } — the number of draw calls a full frame needs.
   begin(view, fresh = true) {
     if (this.lost) return { strips: 0 };
     const gl = this.gl;
@@ -150,7 +132,6 @@ export class Renderer {
     const scale = h / 360;
     const shaders = SHADERS[view.set];
     const iters = ORBITS[view.set].iters(view.maxIter);
-    // forceDeep is a debugging switch: perturbation at any zoom, to diff against the float path.
     const deep = !shaders.float || this.forceDeep || cam.lz > FLOAT_LOG_ZOOM;
     let name;
     let refCpuMs = 0;
@@ -167,10 +148,8 @@ export class Renderer {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.refTex);
       gl.uniform1i(prog.u.u_ref, 0);
-      // Julia spans both stored orbits, so it counts texels rather than steps.
       gl.uniform1i(prog.u.u_refLen, ref.texels ?? ref.len);
       gl.uniform1i(prog.u.u_ref2, ref.split ?? 0);
-      // pixel size = 2^-lz / scale, split into mantissa and exponent
       const e = Math.floor(-cam.lz);
       const m = 2 ** (-cam.lz - e) / scale;
       gl.uniform1f(prog.u.u_pxm, m);
@@ -193,7 +172,6 @@ export class Renderer {
     gl.uniform1i(prog.u.u_maxIter, view.maxIter);
     gl.uniform1i(prog.u.u_palette, this.palette | 0);
     this.refCpuMs = refCpuMs;
-    // Timing belongs to one frame: drop queries a cancelled frame left behind.
     if (fresh && !this.timing) {
       for (const q of this.queries) gl.deleteQuery(q);
       this.queries = [];
@@ -202,7 +180,6 @@ export class Renderer {
     return { strips: Math.min(strips, h) };
   }
 
-  // Draw strip i of n. Each strip gets its own timer query; gpuTime() sums them.
   drawStrip(i, n) {
     if (this.lost) return;
     const gl = this.gl;
@@ -228,14 +205,11 @@ export class Renderer {
     if (n > 1) gl.disable(gl.SCISSOR_TEST);
   }
 
-  // Draw a whole frame synchronously (thumbnails, PNG export).
   renderAll(view) {
     const { strips } = this.begin(view);
     for (let i = 0; i < strips; i++) this.drawStrip(i, strips);
   }
 
-  // Resolves with total GPU time in ms for the queries issued so far in the
-  // current frame, or null. Single-flight: concurrent callers share one poll.
   gpuTime() {
     if (this.timing) return this.timing;
     if (!this.queries.length) return Promise.resolve(null);

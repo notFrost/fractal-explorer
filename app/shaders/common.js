@@ -1,4 +1,3 @@
-
 export const VERT = `#version 300 es
 void main() {
   vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
@@ -10,18 +9,18 @@ precision highp float;
 precision highp int;
 precision highp sampler2D;
 
-uniform vec2 u_res;        // canvas size in pixels
-uniform float u_px;        // world units per pixel (float tiers)
-uniform vec2 u_center;     // camera centre, float32 (direct sets only)
-uniform vec2 u_offset;     // camera minus reference centre, in pixels (perturbation tiers)
-uniform float u_pxm;       // pixel size mantissa (floatexp tier)
-uniform int u_pxe;         // pixel size exponent (floatexp tier)
+uniform vec2 u_res;
+uniform float u_px;
+uniform vec2 u_center;
+uniform vec2 u_offset;
+uniform float u_pxm;
+uniform int u_pxe;
 uniform int u_maxIter;
 uniform int u_refLen;
-uniform int u_ref2;        // where Julia's second reference orbit starts
-uniform vec2 u_julia;      // Julia's parameter C (direct tier only)
-uniform sampler2D u_ref;   // reference orbit, RGBA32F, 1024 wide
-uniform int u_palette;     // which colourway palette() draws, see palettes.js
+uniform int u_ref2;
+uniform vec2 u_julia;
+uniform sampler2D u_ref;
+uniform int u_palette;
 
 out vec4 outColor;
 
@@ -112,7 +111,7 @@ float smoothT(int steps, float logzz) {
 
 vec4 refAt(int i) { return texelFetch(u_ref, ivec2(i & 1023, i >> 10), 0); }
 
-const float SKIN = 1e-5;  // wider than float32 error near the boundary
+const float SKIN = 1e-5;
 
 bool inCardioidOrBulb(vec2 c) {
   vec2 b = c + vec2(1.0, 0.0);
@@ -159,6 +158,5 @@ bool feLess(FE a, FE b) {
   return dot(a.m, a.m) * pow2(2 * d) < dot(b.m, b.m);
 }
 
-// |a|² as a scalar FE (in .x).
 FE feMag2(FE a) { return fe(vec2(dot(a.m, a.m), 0.0), 2 * a.e); }
 `;
