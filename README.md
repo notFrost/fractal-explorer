@@ -12,6 +12,10 @@ Try [10^301 zoom](https://fractal-explorer-six.vercel.app/app/#mandelbrot@0,1,2^
 to see the arbitrary-precision path working: a 1128-bit reference orbit, drawn
 in 77 strips.
 
+## Name
+
+This project has two names. In casual conversation, it can be referred to as Fractal Explorer. However, that name is not specific to to this program, with several other fractal explorers sharing that name, so it can also be called FMP, short for "Fractal Modification Program". Of course, FMP is not a unique acronym, but no other similar programs share this name, meaning in the context of fractal viewers, FMP is the project-specific name. In writing, FMP can also be frequently used to make writing information about the program faster.
+
 ## Run
 
 ```
