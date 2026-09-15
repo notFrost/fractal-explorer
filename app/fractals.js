@@ -70,6 +70,13 @@ export const SETS = {
     home: { x: 1, y: 0, zoom: 96 },
     bookmarks: [],
   },
+  custom: {
+    name: 'Custom',
+    formula: 'z ← z² + c',
+    maxLogZoom: FLOAT_LOG_ZOOM,
+    home: { x: -0.7, y: 0, zoom: 135 },
+    bookmarks: [],
+  },
 };
 
 // Budget grows with zoom depth; the detail multiplier is the user's override.

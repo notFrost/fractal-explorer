@@ -576,4 +576,5 @@ export const ORBITS = {
   burningship: { double: shipOrbitDouble, big: shipOrbitBig, stride: 1, iters: (n) => n },
   mandelbug: { double: bugOrbitDouble, big: bugOrbitBig, stride: 1, iters: (n) => n },
   pacman: { double: pacmanOrbitDouble, big: null, stride: 2, iters: (n) => n },
+  custom: { double: null, big: null, stride: 1, iters: (n) => n },
 };

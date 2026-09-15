@@ -2,6 +2,7 @@ import { SETS, MIN_LOG_ZOOM, iterationsFor } from './fractals.js';
 import { Camera } from './precision.js';
 import { Renderer } from './gpu.js';
 import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palettes.js';
+import { parseFormula } from './formula.js';
 
 // ---------- State ----------
 
@@ -15,6 +16,7 @@ const state = {
   // Colourway key, see palettes.js. Rides in the URL as ?palette= and is
   // remembered per browser.
   palette: DEFAULT_PALETTE,
+  formula: '',
 };
 
 const $ = (s) => document.querySelector(s);
@@ -47,7 +49,13 @@ const juliaUi = {
   im: $('#julia-im'),
   presets: $('#julia-presets'),
   error: $('#julia-error'),
-  label: $('#set-c'),
+};
+const setLabel = $('#set-c');
+const editor = {
+  page: $('#editor'),
+  form: $('#editor-form'),
+  input: $('#formula'),
+  error: $('#formula-error'),
 };
 
 let renderer = null;
@@ -125,6 +133,7 @@ function scheduleHash() {
 function readHash() {
   const m = location.hash.match(/^#(\w+)@([^,]+),([^,]+),([^,]+)(?:,([^,]+),([^,]+))?$/);
   if (!m || !SETS[m[1]]) return false;
+  if (m[1] === 'custom' && !hasCustom()) return false;
   const cam = Camera.fromStrings(m[2], m[3], m[4]);
   if (!cam) return false;
   state.set = m[1];
@@ -346,15 +355,22 @@ hud.toggle.addEventListener('click', () => setHud(!hudOpen));
 
 // ---------- Julia's parameter ----------
 
+function showSetLabel() {
+  const text = state.set === 'julia' ? `C = ${juliaText(state.julia)}`
+    : state.set === 'custom' ? SETS.custom.formula
+    : '';
+  setLabel.textContent = text;
+  setLabel.hidden = !text;
+}
+
 // The panel only means anything for Julia, so it is hidden everywhere else.
 function showJuliaUi() {
   const on = state.set === 'julia';
   juliaUi.panel.hidden = !on;
-  juliaUi.label.hidden = !on;
+  showSetLabel();
   if (!on) return;
   juliaUi.re.value = state.julia.re;
   juliaUi.im.value = state.julia.im;
-  juliaUi.label.textContent = `C = ${juliaText(state.julia)}`;
   juliaUi.error.textContent = '';
 }
 
@@ -399,6 +415,61 @@ juliaUi.presets.replaceChildren(
     return el;
   }),
 );
+
+// ---------- The formula editor ----------
+
+const DEFAULT_FORMULA = 'Z_(n+1) = Z_(n)^2 + C';
+
+function applyFormula(text) {
+  if (!renderer) return 'this browser has no WebGL2';
+  let parsed;
+  try {
+    parsed = parseFormula(text);
+  } catch (err) {
+    return err.message;
+  }
+  try {
+    renderer.setCustom(parsed.glsl);
+  } catch {
+    return 'the GPU would not compile that formula';
+  }
+  state.formula = String(text).trim();
+  SETS.custom.formula = `z ← ${parsed.text}`;
+  const url = new URL(location.href);
+  url.searchParams.set('f', state.formula);
+  history.replaceState(null, '', url);
+  return null;
+}
+
+const hasCustom = () => Boolean(renderer?.customExpr);
+
+function showEditor() {
+  keys.clear();
+  frameSeq++;
+  mode = 'editor';
+  document.body.classList.remove('viewing');
+  viewer.hidden = true;
+  menu.hidden = true;
+  editor.page.hidden = false;
+  editor.input.value = state.formula || DEFAULT_FORMULA;
+  editor.error.textContent = '';
+  editor.input.focus();
+  editor.input.select();
+}
+
+editor.form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const err = applyFormula(editor.input.value);
+  if (err) {
+    editor.error.textContent = err;
+    return;
+  }
+  showViewer('custom', homeView('custom'));
+});
+
+editor.input.addEventListener('input', () => { editor.error.textContent = ''; });
+$('#editor-cancel').addEventListener('click', showMenu);
+$('#create').addEventListener('click', showEditor);
 
 // A coordinate pasted anywhere in the viewer goes straight there.
 window.addEventListener('paste', (e) => {
@@ -457,6 +528,10 @@ const movementKeys = new Set(['a', 'd', 'w', 's', 'q', 'e', 'shift', 'arrowleft'
 const STEP_LZ = Math.log2(1.2);
 
 window.addEventListener('keydown', (e) => {
+  if (mode === 'editor') {
+    if (e.key === 'Escape') showMenu();
+    return;
+  }
   if (mode !== 'view') return;
   if (e.target.closest?.('input, textarea')) {
     if (e.key === 'Escape') closeGoto();
@@ -650,11 +725,16 @@ function bookmarkCamera(b) {
 }
 
 function showViewer(set, view) {
+  if (set === 'custom' && !hasCustom()) {
+    showEditor();
+    return;
+  }
   state.set = set;
   if (view) state.cam = new Camera(view.x, view.y, view.zoom);
   mode = 'view';
   document.body.classList.add('viewing');
   menu.hidden = true;
+  editor.page.hidden = true;
   viewer.hidden = false;
   closeGoto();
   $('#set-name').textContent = SETS[set].name;
@@ -685,6 +765,7 @@ function showMenu() {
   mode = 'menu';
   document.body.classList.remove('viewing');
   viewer.hidden = true;
+  editor.page.hidden = true;
   menu.hidden = false;
   clearTimeout(hashTimer);
   history.replaceState(null, '', location.pathname + location.search);
@@ -727,9 +808,12 @@ for (const card of document.querySelectorAll('.card')) {
 
 // ---------- Boot ----------
 
-window.__fx = { state, showViewer, showMenu, renderCards, render, renderer, iterationsFor, Camera, parseLocation, parseZoom, goTo, applyJulia, setPalette };
+window.__fx = { state, showViewer, showMenu, showEditor, renderCards, render, renderer, iterationsFor, Camera, parseLocation, parseZoom, goTo, applyJulia, applyFormula, setPalette };
 
 setPalette(initialPalette(), { render: false });
+
+const linkedFormula = new URLSearchParams(location.search).get('f');
+if (linkedFormula) applyFormula(linkedFormula);
 
 if (readHash()) {
   showViewer(state.set);

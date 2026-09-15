@@ -11,7 +11,8 @@ One source of truth for how this toy looks. Three sheets, loaded in order:
 Rules of the road:
 
 - A page's own sheet holds only that page's layout. `app/menu.css`,
-  `app/viewer.css` and `app/hud.css` never restate a token or a control.
+  `app/editor.css`, `app/viewer.css` and `app/hud.css` never restate a token
+  or a control.
 - Nothing outside `tokens.css` uses a raw colour, font stack or duration.
 - A control moves into `chrome.css` when a second page needs it, not before.
   `.cbtn`, the round icon button, is still viewer-only for that reason.
