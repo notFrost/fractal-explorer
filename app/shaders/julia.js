@@ -1,6 +1,5 @@
 import { FE_LIB } from './common.js';
 
-// Julia: the same z² + C, but C is fixed and the pixel supplies z_0.
 export const JULIA = `
 float escape(vec2 z) {
   for (int n = 0; n < u_maxIter; n++) {
@@ -16,16 +15,6 @@ void main() {
   outColor = vec4(palette(escape(z)), 1.0);
 }`;
 
-// Julia by perturbation. C is the same for every pixel, so the delta has no dc
-// term: d ← (2Z + d) d, starting from the pixel's offset from the reference
-// centre. The cancellation in that product happens when Z ≈ −d/2, that is when
-// |z| ≈ |d| / 2 — the pixel's orbit passing closer to the origin than its own
-// delta. Rebasing onto the centre orbit's start would be no help, since its
-// Z_0 is the view centre rather than zero, so the texture carries a second
-// orbit: the critical one, Z_0 = 0, at texels [0, u_ref2). A pixel rides the
-// centre orbit at [u_ref2, u_refLen) until that first cancellation (or until
-// the orbit runs out), then sets d = z and follows the critical orbit with
-// Mandelbrot's rebasing, which is exact there because the orbit starts at 0.
 export const JULIA_PERT = `
 float escape(vec2 d0) {
   vec2 d = d0;
