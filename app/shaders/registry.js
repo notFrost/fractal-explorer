@@ -26,8 +26,6 @@ export const SOURCES = {
   pacman: PACMAN_PERT,
 };
 
-// Programs per set: `float` iterates directly (absent for Mandelbrot, which is
-// always perturbed), `pert` carries float32 deltas, `fe` floatexp deltas.
 export const SHADERS = {
   mandelbrot: { pert: 'mandelbrot', fe: 'mandelbrotFE' },
   webb: { float: 'webb', pert: 'webbPert', fe: 'webbFE' },
@@ -39,7 +37,6 @@ export const SHADERS = {
   custom: { float: 'custom' },
 };
 
-// Relative cost of one pixel-iteration, for splitting frames into strips.
 export const COST = {
   mandelbrot: 1, mandelbrotFE: 5,
   webb: 1, webbPert: 1.5, webbFE: 6,
