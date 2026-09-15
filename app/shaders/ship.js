@@ -1,8 +1,5 @@
 import { FE_LIB } from './common.js';
 
-// Burning Ship as the original writes it: the imaginary part of c enters
-// negated, which is z ← (|Re z| + i|Im z|)² + c̄. That conjugate is what stands
-// the ship upright on a y-up stage, so it is kept rather than corrected.
 export const BURNING_SHIP = `
 float escape(vec2 c) {
   vec2 z = vec2(0.0);
@@ -19,14 +16,6 @@ void main() {
   outColor = vec4(palette(escape(c)), 1.0);
 }`;
 
-// Burning Ship by perturbation. The absolute values are the whole difficulty:
-// |Z + d| − |Z| cannot be formed by subtracting two nearly equal floats, so it
-// is taken by cases instead (the "diffabs" trick), which is exact. Write that
-// difference for both parts as w, so the pixel's absolute value is exactly
-// |Z| + w. Expanding the square then collapses to Mandelbrot's own shape:
-//   d' = (2 |Z| + w) w + c̄ − C̄
-// with the conjugate negating the imaginary offset. Z_0 = 0 as in Mandelbrot,
-// so a rebase is d = z, m = 0.
 export const SHIP_PERT = `
 float diffabs(float X, float x) {
   if (X >= 0.0) return X + x >= 0.0 ? x : -(2.0 * X + x);
@@ -56,11 +45,6 @@ void main() {
   outColor = vec4(palette(escape(dc)), 1.0);
 }`;
 
-// The same recurrence with floatexp deltas. diffabs keeps the delta's own
-// scale: a delta far below the reference component cannot reach past zero, so
-// the sign of that component alone decides and the answer is ±x exactly.
-// Otherwise the reference component is brought into the delta's scale, where
-// it is at most 2^30 times the mantissa, and the cases are taken in float32.
 export const SHIP_FE = FE_LIB + `
 float diffabsScaled(float X, float m, int e) {
   if (X == 0.0) return abs(m);
