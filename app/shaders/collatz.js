@@ -1,7 +1,5 @@
 import { FE_LIB } from './common.js';
 
-// Complex parity: floor(|z|) mod 2. Odd -> 3z + 1, even -> z / 2.
-// Colour is fixed after two steps, shown only if the orbit ends outside radius 5.
 export const COLLATZ = `
 vec2 step_(vec2 z) {
   float parity = mod(floor(length(z)), 2.0);
@@ -27,14 +25,6 @@ void main() {
   outColor = vec4(palette(escape(c)), 1.0);
 }`;
 
-// Collatz by perturbation. Both branches are affine, so while a pixel takes
-// the reference's branch its delta is exact: d ← 3d or d/2. All the precision
-// goes into the parity test. |P + d| − |P| is computed without cancellation as
-// (2 Re(P̄ d) + |d|²) / (|P + d| + |P|) and compared, in log2, against the
-// distances from |P| to the integer radii either side (two texels per step:
-// (Z, log2 lo, log2 hi) and (parity)). A pixel that takes the other branch
-// leaves the reference and carries on from its own float32 base, keeping the
-// exact delta alongside so pixels that left together still tell apart.
 export const COLLATZ_PERT = FE_LIB + `
 const float EVEN_ONLY = 16777216.0;   // float32 has only even integers above this
 
