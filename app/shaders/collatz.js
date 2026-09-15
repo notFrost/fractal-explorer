@@ -28,10 +28,6 @@ void main() {
 export const COLLATZ_PERT = FE_LIB + `
 const float EVEN_ONLY = 16777216.0;   // float32 has only even integers above this
 
-// Parity of floor|P + d|, given the base's parity and the log2 distances from
-// |P| down and up to the nearest boundaries. Precise for any |d| below |P| / 4:
-// the radius change is formed without cancellation, so a delta of 0.03 on a
-// base of 1e5 still lands on the right side of a boundary float32 cannot see.
 float pixelParity(vec2 P, FE d, float lo, float hi, float par) {
   vec2 df = feToFloat(d);
   if (dot(df, df) * 16.0 >= dot(P, P)) return mod(floor(length(P + df)), 2.0);
