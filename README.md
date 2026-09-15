@@ -3,9 +3,10 @@
 **[Live demo](https://fractal-explorer-six.vercel.app/app/)**
 
 A web port of a PenguinMod project (`FractalExplorer.pmp`). Seven escape-time
-sets drawn on the GPU with WebGL2 fragment shaders. Six of them zoom without a
-precision limit; Pacman stops at 2^40. The original's camera model, pen
-colours, and controls carry over; the CPU pen-plotting does not.
+sets drawn on the GPU with WebGL2 fragment shaders, plus an eighth built from a
+formula you type. Six of them zoom without a precision limit; Pacman stops at
+2^40. The original's camera model, pen colours, and controls carry over; the
+CPU pen-plotting does not.
 
 Try [10^301 zoom](https://fractal-explorer-six.vercel.app/app/#mandelbrot@0,1,2^1000.000)
 to see the arbitrary-precision path working: a 1128-bit reference orbit, drawn
@@ -169,6 +170,30 @@ contour bands every eight iterations, dark on paper or pale on slate.
 **Timing** in the HUD sums `EXT_disjoint_timer_query_webgl2` queries across
 the strips of one frame. `ref` is the CPU time for the reference orbit when it
 had to be recomputed.
+
+## Your own formula
+
+**Create Fractal**, at the bottom of the menu, takes one line — `Z_(n+1) =
+Z_(n)^2 + C`, or `z ← z² + c`, or just `z^2 + c` — and renders it. The text is
+parsed into an expression and compiled into a fragment shader, so a typed
+formula draws on the same path as the built-in sets.
+
+What it reads: `z` and `c`, decimal numbers, `i`, `pi` and `e`; `+ - * / ^`
+with brackets, two values side by side for multiplication; and `abs re im
+conj exp log sqrt sin cos tan sinh cosh tanh`, each of one argument. The
+notation the cards use works as typed — superscripts, subscripts, `←`, `×`,
+`÷`, `−` — so `zᶻ + c` is Pacman. A whole-number exponent squares and
+multiplies rather than going through `exp` and `log`, which is faster and,
+unlike the log, defined at `z = 0`.
+
+Everything else is fixed in this first version: `z` starts at 0, `c` is the
+pixel, the orbit escapes at `|z| > 100`. There is no perturbed form of an
+arbitrary recurrence, so the custom set iterates directly in float32 and stops
+at 10^6 zoom, where the others hand over to a reference orbit. A formula can
+also overshoot the bailout or reach NaN, neither of which the smooth count
+survives, so a count it cannot read falls back to the step number. The text
+rides in the URL as `?f=` before the hash, so a custom view shares like any
+other.
 
 ## Ported from the original
 

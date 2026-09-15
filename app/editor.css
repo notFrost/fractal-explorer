@@ -1,0 +1,70 @@
+/* The Create Fractal button on the menu, and the formula editor page.
+   The page shell, button and input come from design/chrome.css. */
+
+.create {
+  margin: 0;
+}
+
+.create-btn {
+  --wobble-scale: 1.04;
+  --wobble-tilt: 1.5deg;
+  padding: 0.7rem 1.4rem;
+  font-family: var(--display);
+  font-stretch: condensed;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 1.3rem;
+  letter-spacing: 0.02em;
+}
+
+.create-btn:hover,
+.create-btn:focus-visible {
+  animation: wobble 900ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .create-btn:hover,
+  .create-btn:focus-visible { animation: none; }
+}
+
+.editor {
+  display: grid;
+  align-content: start;
+  gap: 0.6rem;
+  width: 100%;
+  max-width: 60ch;
+}
+
+.editor-label {
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.editor-input {
+  font-size: 1.25rem;
+  padding: 0.6rem 0.7rem;
+}
+
+.editor-help {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  color: var(--dim);
+}
+
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+}
+
+.editor-fixed {
+  margin: 0.6rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line);
+  color: var(--dim);
+}

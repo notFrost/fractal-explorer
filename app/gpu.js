@@ -778,6 +778,73 @@ void main() {
   outColor = vec4(palette(escape(dc)), 1.0);
 }`;
 
+// The custom set's shader is built at run time from a typed formula, so it
+// carries the complex functions the editor's names map to. See formula.js.
+const CUSTOM_LIB = `
+vec2 cdiv(vec2 a, vec2 b) { return vec2(dot(a, b), a.y * b.x - a.x * b.y) / dot(b, b); }
+vec2 cre(vec2 z) { return vec2(z.x, 0.0); }
+vec2 cim(vec2 z) { return vec2(z.y, 0.0); }
+vec2 cabs(vec2 z) { return vec2(length(z), 0.0); }
+vec2 cconj(vec2 z) { return vec2(z.x, -z.y); }
+
+// exp overflows to infinity well before the bailout matters, so the real part
+// is capped: e^60 squares to 1e52, which escapes on the same step either way.
+vec2 cexp(vec2 z) { return exp(min(z.x, 60.0)) * vec2(cos(z.y), sin(z.y)); }
+vec2 clog(vec2 z) { return vec2(0.5 * log(dot(z, z)), atan(z.y, z.x)); }
+
+vec2 csqrt(vec2 z) {
+  float r = length(z);
+  if (r == 0.0) return vec2(0.0);
+  return vec2(sqrt(0.5 * (r + z.x)), (z.y < 0.0 ? -1.0 : 1.0) * sqrt(0.5 * (r - z.x)));
+}
+
+vec2 cpowi(vec2 z, int n) {
+  int k = n < 0 ? -n : n;
+  vec2 r = vec2(1.0, 0.0);
+  vec2 b = z;
+  for (int s = 0; s < 7; s++) {
+    if (k == 0) break;
+    if ((k & 1) == 1) r = cmul(r, b);
+    b = cmul(b, b);
+    k >>= 1;
+  }
+  return n < 0 ? cdiv(vec2(1.0, 0.0), r) : r;
+}
+
+vec2 cpow(vec2 a, vec2 b) { return dot(a, a) == 0.0 ? vec2(0.0) : cexp(cmul(b, clog(a))); }
+
+vec2 csin(vec2 z) { return vec2(sin(z.x) * cosh(z.y), cos(z.x) * sinh(z.y)); }
+vec2 ccos(vec2 z) { return vec2(cos(z.x) * cosh(z.y), -sin(z.x) * sinh(z.y)); }
+vec2 ctan(vec2 z) { return cdiv(csin(z), ccos(z)); }
+vec2 csinh(vec2 z) { return vec2(sinh(z.x) * cos(z.y), cosh(z.x) * sin(z.y)); }
+vec2 ccosh(vec2 z) { return vec2(cosh(z.x) * cos(z.y), sinh(z.x) * sin(z.y)); }
+vec2 ctanh(vec2 z) { return cdiv(csinh(z), ccosh(z)); }
+`;
+
+// Direct float32 iteration from z = 0, with the pixel as c. An arbitrary
+// formula can overshoot the bailout or reach NaN, neither of which the smooth
+// count survives, so a count it cannot read falls back to the step number.
+function customBody(expr) {
+  return CUSTOM_LIB + `
+float escape(vec2 c) {
+  vec2 z = vec2(0.0);
+  for (int n = 0; n < u_maxIter; n++) {
+    z = ${expr};
+    float zz = dot(z, z);
+    if (!(zz < 1e4)) {
+      float t = smoothT(n + 1, log(zz));
+      return t > 0.0 ? t : float(n + 1);
+    }
+  }
+  return 0.0;
+}
+
+void main() {
+  vec2 c = u_center + (gl_FragCoord.xy - 0.5 * u_res) * u_px;
+  outColor = vec4(palette(escape(c)), 1.0);
+}`;
+}
+
 const SOURCES = {
   mandelbrot: MANDELBROT,
   mandelbrotFE: MANDELBROT_FE,
@@ -808,6 +875,7 @@ const SHADERS = {
   burningship: { float: 'ship', pert: 'shipPert', fe: 'shipFE' },
   mandelbug: { float: 'bug', pert: 'bugPert', fe: 'bugFE' },
   pacman: { pert: 'pacman', fe: 'pacman' },
+  custom: { float: 'custom' },
 };
 
 // Relative cost of one pixel-iteration, for splitting frames into strips.
@@ -819,6 +887,7 @@ const COST = {
   ship: 1.2, shipPert: 2, shipFE: 7,
   bug: 1, bugPert: 1, bugFE: 5,
   pacman: 8,
+  custom: 4,   // unknowable in advance; priced as if the formula were expensive
 };
 
 const UNIFORMS = ['u_res', 'u_px', 'u_center', 'u_offset', 'u_pxm', 'u_pxe', 'u_maxIter', 'u_refLen', 'u_ref2', 'u_julia', 'u_ref', 'u_palette'];
@@ -860,15 +929,15 @@ export class Renderer {
     const gl = this.gl;
     this.timer = gl.getExtension('EXT_disjoint_timer_query_webgl2');
     this.programs = {};
-    const vs = compile(gl, gl.VERTEX_SHADER, VERT);
+    this.vs = compile(gl, gl.VERTEX_SHADER, VERT);
     for (const [name, body] of Object.entries(SOURCES)) {
-      const fs = compile(gl, gl.FRAGMENT_SHADER, COMMON + body);
-      const p = gl.createProgram();
-      gl.attachShader(p, vs);
-      gl.attachShader(p, fs);
-      gl.linkProgram(p);
-      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
-      this.programs[name] = { p, u: Object.fromEntries(UNIFORMS.map((n) => [n, gl.getUniformLocation(p, n)])) };
+      this.programs[name] = this.link(COMMON + body);
+    }
+    // A context loss clears the typed formula's program along with the rest.
+    if (this.customExpr) {
+      const expr = this.customExpr;
+      this.customExpr = null;
+      this.setCustom(expr);
     }
     // One fixed-size texture and one staging buffer, reused for every reference.
     // Room for two full-length orbits, which is what Julia stores; Collatz uses
@@ -886,6 +955,27 @@ export class Renderer {
     this.queries = [];
     this.timing = null;
     this.maxSide = Math.min(gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0], 8192);
+  }
+
+  link(src) {
+    const gl = this.gl;
+    const fs = compile(gl, gl.FRAGMENT_SHADER, src);
+    const p = gl.createProgram();
+    gl.attachShader(p, this.vs);
+    gl.attachShader(p, fs);
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    return { p, u: Object.fromEntries(UNIFORMS.map((n) => [n, gl.getUniformLocation(p, n)])) };
+  }
+
+  // Builds the custom set's shader around a GLSL expression for the next z.
+  // Throws the compiler's message if the expression will not build.
+  setCustom(expr) {
+    if (expr === this.customExpr && this.programs.custom) return;
+    const prog = this.link(COMMON + customBody(expr));
+    if (this.programs.custom) this.gl.deleteProgram(this.programs.custom.p);
+    this.programs.custom = prog;
+    this.customExpr = expr;
   }
 
   // ---------- Reference orbit cache ----------
