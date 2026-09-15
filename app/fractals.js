@@ -5,7 +5,8 @@ export const SETS = {
   mandelbrot: {
     name: 'Mandelbrot',
     formula: 'z ← z² + c',
-    home: { x: 0, y: 0, zoom: 100 },
+    // The set runs from -2 to 0.47, so the origin is not its middle.
+    home: { x: -0.7, y: 0, zoom: 135 },
     bookmarks: [
       { x: 0.38, y: 0.1, zoom: 40000 },
       { x: 0.297364, y: -0.019193, zoom: 41018 },
