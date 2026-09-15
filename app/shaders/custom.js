@@ -1,0 +1,60 @@
+
+export const CUSTOM_LIB = `
+vec2 cdiv(vec2 a, vec2 b) { return vec2(dot(a, b), a.y * b.x - a.x * b.y) / dot(b, b); }
+vec2 cre(vec2 z) { return vec2(z.x, 0.0); }
+vec2 cim(vec2 z) { return vec2(z.y, 0.0); }
+vec2 cabs(vec2 z) { return vec2(length(z), 0.0); }
+vec2 cconj(vec2 z) { return vec2(z.x, -z.y); }
+
+vec2 cexp(vec2 z) { return exp(min(z.x, 60.0)) * vec2(cos(z.y), sin(z.y)); }
+vec2 clog(vec2 z) { return vec2(0.5 * log(dot(z, z)), atan(z.y, z.x)); }
+
+vec2 csqrt(vec2 z) {
+  float r = length(z);
+  if (r == 0.0) return vec2(0.0);
+  return vec2(sqrt(0.5 * (r + z.x)), (z.y < 0.0 ? -1.0 : 1.0) * sqrt(0.5 * (r - z.x)));
+}
+
+vec2 cpowi(vec2 z, int n) {
+  int k = n < 0 ? -n : n;
+  vec2 r = vec2(1.0, 0.0);
+  vec2 b = z;
+  for (int s = 0; s < 7; s++) {
+    if (k == 0) break;
+    if ((k & 1) == 1) r = cmul(r, b);
+    b = cmul(b, b);
+    k >>= 1;
+  }
+  return n < 0 ? cdiv(vec2(1.0, 0.0), r) : r;
+}
+
+vec2 cpow(vec2 a, vec2 b) { return dot(a, a) == 0.0 ? vec2(0.0) : cexp(cmul(b, clog(a))); }
+
+vec2 csin(vec2 z) { return vec2(sin(z.x) * cosh(z.y), cos(z.x) * sinh(z.y)); }
+vec2 ccos(vec2 z) { return vec2(cos(z.x) * cosh(z.y), -sin(z.x) * sinh(z.y)); }
+vec2 ctan(vec2 z) { return cdiv(csin(z), ccos(z)); }
+vec2 csinh(vec2 z) { return vec2(sinh(z.x) * cos(z.y), cosh(z.x) * sin(z.y)); }
+vec2 ccosh(vec2 z) { return vec2(cosh(z.x) * cos(z.y), sinh(z.x) * sin(z.y)); }
+vec2 ctanh(vec2 z) { return cdiv(csinh(z), ccosh(z)); }
+`;
+
+export function customBody(expr) {
+  return CUSTOM_LIB + `
+float escape(vec2 c) {
+  vec2 z = vec2(0.0);
+  for (int n = 0; n < u_maxIter; n++) {
+    z = ${expr};
+    float zz = dot(z, z);
+    if (!(zz < 1e4)) {
+      float t = smoothT(n + 1, log(zz));
+      return t > 0.0 ? t : float(n + 1);
+    }
+  }
+  return 0.0;
+}
+
+void main() {
+  vec2 c = u_center + (gl_FragCoord.xy - 0.5 * u_res) * u_px;
+  outColor = vec4(palette(escape(c)), 1.0);
+}`;
+}
