@@ -16,7 +16,6 @@ const state = {
   // Colourway key, see palettes.js. Rides in the URL as ?palette= and is
   // remembered per browser.
   palette: DEFAULT_PALETTE,
-  // What was typed into the formula editor, as typed. Rides in the URL as ?f=.
   formula: '',
 };
 
@@ -134,7 +133,6 @@ function scheduleHash() {
 function readHash() {
   const m = location.hash.match(/^#(\w+)@([^,]+),([^,]+),([^,]+)(?:,([^,]+),([^,]+))?$/);
   if (!m || !SETS[m[1]]) return false;
-  // A custom link needs its formula, which travels separately as ?f=.
   if (m[1] === 'custom' && !hasCustom()) return false;
   const cam = Camera.fromStrings(m[2], m[3], m[4]);
   if (!cam) return false;
@@ -357,8 +355,6 @@ hud.toggle.addEventListener('click', () => setHud(!hudOpen));
 
 // ---------- Julia's parameter ----------
 
-// The line beside the set name: Julia's C, or the typed formula. It sits in
-// the top bar rather than the HUD so it survives a screenshot.
 function showSetLabel() {
   const text = state.set === 'julia' ? `C = ${juliaText(state.julia)}`
     : state.set === 'custom' ? SETS.custom.formula
@@ -424,8 +420,6 @@ juliaUi.presets.replaceChildren(
 
 const DEFAULT_FORMULA = 'Z_(n+1) = Z_(n)^2 + C';
 
-// Compiles a typed formula into the custom set's shader. Returns an error
-// string to show under the field, or null when the set is ready to open.
 function applyFormula(text) {
   if (!renderer) return 'this browser has no WebGL2';
   let parsed;
@@ -731,7 +725,6 @@ function bookmarkCamera(b) {
 }
 
 function showViewer(set, view) {
-  // The custom set has no shader until a formula has been typed.
   if (set === 'custom' && !hasCustom()) {
     showEditor();
     return;

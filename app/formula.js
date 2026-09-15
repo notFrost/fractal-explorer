@@ -1,5 +1,4 @@
 // Turns a typed iteration formula into a GLSL expression for the next z.
-// The only free names are z and c; everything else the editor fixes.
 
 const SUPER = {
   '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
@@ -16,7 +15,6 @@ const SUB_RUN = new RegExp(`[${Object.keys(SUB).join('')}]+`, 'g');
 
 const BRACKETS = { '{': '(', '}': ')', '[': '(', ']': ')' };
 
-// Name to the GLSL function in the custom shader's library, see gpu.js.
 const FUNCS = {
   abs: 'cabs', re: 'cre', im: 'cim', conj: 'cconj',
   exp: 'cexp', log: 'clog', ln: 'clog', sqrt: 'csqrt',
@@ -42,8 +40,6 @@ function glslFloat(v) {
   return /[.e]/.test(s) ? s : `${s}.0`;
 }
 
-// Real constants fold as they parse, so `num` carries the value of a node
-// that is a plain real number and is null once the node can be complex.
 const real = (v) => ({ code: `vec2(${glslFloat(v)}, 0.0)`, num: v });
 const complex = (code) => ({ code, num: null });
 
@@ -53,8 +49,6 @@ const CONSTS = {
   e: () => real(Math.E),
 };
 
-// Superscripts become powers, subscripts become `_(…)`, and the arrows and
-// dashes of the notation the cards use become the ASCII the lexer reads.
 function normalize(src) {
   let s = String(src).trim().toLowerCase();
   s = s.replace(/[−–—‒]/g, '-').replace(/[·×∙]/g, '*').replace(/[÷∕]/g, '/');
@@ -98,8 +92,6 @@ function lex(s) {
 
 const startsValue = (t) => !!t && (t.t === 'num' || t.t === 'name' || (t.t === 'op' && t.v === '('));
 
-// Recursive descent straight to GLSL. Precedence: + − below × ÷ below unary
-// minus below ^, which is right-associative, so z^2^3 is z^(2^3).
 function compile(tokens) {
   let i = 0;
   let nodes = 0;
@@ -135,8 +127,6 @@ function compile(tokens) {
     return complex(`cdiv(${a.code}, ${b.code})`);
   }
 
-  // A whole-number exponent squares and multiplies instead of going through
-  // exp and log: faster, and defined at z = 0 where the log is not.
   function power(a, b) {
     grow();
     if (b.num !== null && Number.isInteger(b.num) && Math.abs(b.num) <= 64) {
@@ -157,7 +147,6 @@ function compile(tokens) {
     }
   }
 
-  // Two values side by side multiply, so 2z and (z + c)z read as written.
   function term(depth) {
     let a = unary(depth);
     for (;;) {
@@ -213,8 +202,6 @@ function compile(tokens) {
   return out;
 }
 
-// Returns { glsl, text }: the expression for the next z, and the normalized
-// right-hand side to show in the viewer. Throws with a readable message.
 export function parseFormula(src) {
   if (String(src).trim().length > MAX_LENGTH) fail('that formula is too long');
   const rhs = rightHandSide(normalize(src));

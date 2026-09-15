@@ -778,8 +778,6 @@ void main() {
   outColor = vec4(palette(escape(dc)), 1.0);
 }`;
 
-// The custom set's shader is built at run time from a typed formula, so it
-// carries the complex functions the editor's names map to. See formula.js.
 const CUSTOM_LIB = `
 vec2 cdiv(vec2 a, vec2 b) { return vec2(dot(a, b), a.y * b.x - a.x * b.y) / dot(b, b); }
 vec2 cre(vec2 z) { return vec2(z.x, 0.0); }
@@ -787,8 +785,6 @@ vec2 cim(vec2 z) { return vec2(z.y, 0.0); }
 vec2 cabs(vec2 z) { return vec2(length(z), 0.0); }
 vec2 cconj(vec2 z) { return vec2(z.x, -z.y); }
 
-// exp overflows to infinity well before the bailout matters, so the real part
-// is capped: e^60 squares to 1e52, which escapes on the same step either way.
 vec2 cexp(vec2 z) { return exp(min(z.x, 60.0)) * vec2(cos(z.y), sin(z.y)); }
 vec2 clog(vec2 z) { return vec2(0.5 * log(dot(z, z)), atan(z.y, z.x)); }
 
@@ -821,9 +817,6 @@ vec2 ccosh(vec2 z) { return vec2(cosh(z.x) * cos(z.y), sinh(z.x) * sin(z.y)); }
 vec2 ctanh(vec2 z) { return cdiv(csinh(z), ccosh(z)); }
 `;
 
-// Direct float32 iteration from z = 0, with the pixel as c. An arbitrary
-// formula can overshoot the bailout or reach NaN, neither of which the smooth
-// count survives, so a count it cannot read falls back to the step number.
 function customBody(expr) {
   return CUSTOM_LIB + `
 float escape(vec2 c) {
@@ -887,7 +880,7 @@ const COST = {
   ship: 1.2, shipPert: 2, shipFE: 7,
   bug: 1, bugPert: 1, bugFE: 5,
   pacman: 8,
-  custom: 4,   // unknowable in advance; priced as if the formula were expensive
+  custom: 4,
 };
 
 const UNIFORMS = ['u_res', 'u_px', 'u_center', 'u_offset', 'u_pxm', 'u_pxe', 'u_maxIter', 'u_refLen', 'u_ref2', 'u_julia', 'u_ref', 'u_palette'];
@@ -933,7 +926,6 @@ export class Renderer {
     for (const [name, body] of Object.entries(SOURCES)) {
       this.programs[name] = this.link(COMMON + body);
     }
-    // A context loss clears the typed formula's program along with the rest.
     if (this.customExpr) {
       const expr = this.customExpr;
       this.customExpr = null;
@@ -968,8 +960,6 @@ export class Renderer {
     return { p, u: Object.fromEntries(UNIFORMS.map((n) => [n, gl.getUniformLocation(p, n)])) };
   }
 
-  // Builds the custom set's shader around a GLSL expression for the next z.
-  // Throws the compiler's message if the expression will not build.
   setCustom(expr) {
     if (expr === this.customExpr && this.programs.custom) return;
     const prog = this.link(COMMON + customBody(expr));
