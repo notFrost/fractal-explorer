@@ -86,8 +86,10 @@ function fmtZoom(lz) {
   return `10^${Math.round(lz * 0.30103)}×`;
 }
 
-function clampLogZoom(lz) {
-  return Math.max(MIN_LOG_ZOOM, lz);
+// A set whose reference orbit has no arbitrary-precision form carries its own
+// ceiling, so the camera stops where its arithmetic does.
+function clampLogZoom(lz, set = state.set) {
+  return Math.min(SETS[set].maxLogZoom ?? Infinity, Math.max(MIN_LOG_ZOOM, lz));
 }
 
 // Deep zooms resolve hundreds of digits; the HUD shows the first 40 and keeps
@@ -282,7 +284,7 @@ function parseLocation(text) {
 function goTo(loc) {
   const lz = loc.lz === undefined ? state.cam.lz : loc.lz;
   if (!Number.isFinite(lz)) return 'could not read the zoom';
-  const cam = Camera.fromDecimal(loc.xs, loc.ys, clampLogZoom(lz));
+  const cam = Camera.fromDecimal(loc.xs, loc.ys, clampLogZoom(lz, loc.set));
   if (!cam) return 'could not read the coordinate';
   if (loc.c) state.julia = loc.c;
   else if (loc.set === 'julia' && state.set !== 'julia') state.julia = { ...SETS.julia.c };
@@ -715,7 +717,7 @@ function homeView(set) {
   const { x, y, zoom } = SETS[set].home;
   const aspect = window.innerWidth / window.innerHeight;
   if (aspect >= 4 / 3) return { x, y, zoom };
-  return { x, y, zoom: 2 ** clampLogZoom(Math.log2((zoom * aspect * 3) / 4)) };
+  return { x, y, zoom: 2 ** clampLogZoom(Math.log2((zoom * aspect * 3) / 4), set) };
 }
 
 for (const card of document.querySelectorAll('.card')) {

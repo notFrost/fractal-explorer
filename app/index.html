@@ -21,7 +21,7 @@
   <main id="menu" class="page">
     <header class="page-head">
       <h1 class="title">Fractal<br />Explorer</h1>
-      <p class="lede">Six escape-time sets. Pick one, then pan and zoom until something looks worth keeping.</p>
+      <p class="lede">Seven escape-time sets. Pick one, then pan and zoom until something looks worth keeping.</p>
     </header>
 
     <p id="gpu-error" class="gpu-error" hidden></p>
@@ -67,6 +67,13 @@
           <canvas class="card-canvas" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">MandelBug</span>
           <span class="card-formula">z ← Re(z²) + 2i(Re&nbsp;z&nbsp;+&nbsp;Im&nbsp;z) + c</span>
+        </button>
+      </li>
+      <li>
+        <button class="card" data-set="pacman" type="button">
+          <canvas class="card-canvas" width="240" height="180" aria-hidden="true"></canvas>
+          <span class="card-name">Pacman</span>
+          <span class="card-formula">z ← zᶻ + c</span>
         </button>
       </li>
     </ul>

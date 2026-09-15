@@ -2,9 +2,10 @@
 
 **[Live demo](https://fractal-explorer-six.vercel.app/app/)**
 
-A web port of a PenguinMod project (`FractalExplorer.pmp`). Six escape-time
-sets drawn on the GPU with WebGL2 fragment shaders. All six zoom without a
-precision limit. The original's camera model, pen colours, and controls carry
+A web port of a PenguinMod project (`FractalExplorer.pmp`). Seven escape-time
+sets drawn on the GPU with WebGL2 fragment shaders. Six of them zoom without a
+precision limit; Pacman stops at 2^40, because `z^z` has no fixed-point form to
+iterate in BigInt. The original's camera model, pen colours, and controls carry
 over; the CPU pen-plotting does not.
 
 Try [10^301 zoom](https://fractal-explorer-six.vercel.app/app/#mandelbrot@0,1,2^1000.000)
@@ -82,15 +83,16 @@ range. The shader carries each delta as `m × 2^e`, normalised so the mantissa
 stays in [0.5, 1), built from `floatBitsToInt` and `intBitsToFloat` since
 GLSL ES 3.00 lacks `frexp` and `ldexp`.
 
-There is no upper zoom limit in the code. In practice the cost grows with
-depth: the iteration budget is `30 × log2 zoom`, capped at 50 000 (×8 with
-the detail buttons, capped at 100 000), and the reference orbit costs about
-90 ms at 10^300. At 10^300 a 1280×800 frame is roughly 80 strips and under a
-second on an RTX 2060.
+There is no upper zoom limit in the code, bar Pacman's. In practice the cost
+grows with depth: the iteration budget is `30 × log2 zoom`, capped at 50 000
+(×8 with the detail buttons, capped at 100 000), and the reference orbit costs
+about 90 ms at 10^300. At 10^300 a 1280×800 frame is roughly 80 strips and
+under a second on an RTX 2060.
 
 **Webb**, **Collatz**, **Julia**, **Burning Ship** and **MandelBug** iterate
 directly in float32 up to 10^6 zoom and use the same three tiers beyond it,
-with their own reference orbits and shaders.
+with their own reference orbits and shaders. **Pacman** is perturbed at every
+zoom, like Mandelbrot, but has only the first tier.
 
 Webb's two-term recurrence carries a delta on both terms,
 `d ← (2Z + d) d + e, e ← d`. The map has no critical point, so the delta never
@@ -136,6 +138,39 @@ scale: `2(dr + di) + dci`. Nothing cancels that Mandelbrot does not already
 cancel, and `Z₀ = 0`, so its rebasing is used unchanged. The set is unbounded:
 every `c` on the line `Im c = −Re c` is its own fixed point, so the whole line
 belongs to it. The menu opens on the bulk instead, around `−0.97 + 0.97i`.
+
+Pacman iterates `z ← z^z + c`, taking `0^0` as 1, so `z₁ = 1 + c` everywhere.
+`z^z` is `exp(z ln z)` on the principal branch, and perturbation follows from
+`z ln z = Z ln Z + Z·L + d·(ln Z + L)` with `L = Log1p(d/Z)`, giving
+`d' = Z^Z expm1(Z·L + d·(ln Z + L)) + dc` — nothing cancels in it, provided
+`log1p` and `expm1` are the real ones. `Log(Z(1 + u)) = Log Z + Log1p(u)` only
+holds while the two arguments sum inside `(−π, π]`, so the shader wraps the
+imaginary part back into range; it is a no-op once the delta is small. Rebasing
+lands on index 1 rather than 0, since `ln Z₀` is undefined.
+
+The zoom stops at 2^40 — the depth at which every other set hands its reference
+to BigInt — because there is nowhere for Pacman's to go. A BigInt reference
+would need complex `exp`, `ln` and `atan2` at 1000+ bits for every one of up to
+1200 steps, which is seconds to minutes a frame.
+
+Two properties of the set are not Mandelbrot-like. It is unbounded: for `c` far
+to the left, or far up or down, `Re(z ln z) → −∞`, so `z^z → 0` and the orbit
+settles near `c`. The whole far plane is interior and only a wedge on the right
+escapes — the mouth, which repeats up and down the imaginary axis. And crossing
+the bailout is not divergence: orbits reach `|z| ~ 1e13` and come back to
+`|z| ~ 0.5` on the next step, so escape-time here is a drawing convention.
+That overshoot also breaks Mandelbrot's smooth escape count, which runs past
+the step it belongs to and sends a fifth of the escaped plane to `t ≤ 0`, i.e.
+to black. Pacman interpolates the crossing in `log|z|` between the last two
+steps instead, which stays in `[0, 1)` however violent the jump.
+
+The same violence sets a floor on how much of the plane is decidable at all.
+Two orbits started one ulp apart separate to `1e-8` within about 320 steps, so
+wherever escape takes longer than that, no double-precision arithmetic —
+perturbed or direct — gives a stable count, and the picture there is dust.
+Measured against direct iteration on a grid, perturbation never disagrees more
+often than direct iteration disagrees with itself under a one-ulp nudge: it
+sits on that floor rather than above it.
 
 **Colour** is one of seven colourways, all cycling on the original's
 100-iteration period with inside points black. Pen is the original pen
