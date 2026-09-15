@@ -711,10 +711,20 @@ function renderCards() {
   }
 }
 
+// Zoom is measured against height, and cards are 4:3. A viewport narrower than
+// that opens on a vertical slice of what the card showed, so give the zoom back
+// until the width matches.
+function homeView(set) {
+  const { x, y, zoom } = SETS[set].home;
+  const aspect = window.innerWidth / window.innerHeight;
+  if (aspect >= 4 / 3) return { x, y, zoom };
+  return { x, y, zoom: 2 ** clampLogZoom(Math.log2((zoom * aspect * 3) / 4)) };
+}
+
 for (const card of document.querySelectorAll('.card')) {
   card.addEventListener('click', () => {
     state.julia = { ...SETS.julia.c };
-    showViewer(card.dataset.set, SETS[card.dataset.set].home);
+    showViewer(card.dataset.set, homeView(card.dataset.set));
   });
 }
 
