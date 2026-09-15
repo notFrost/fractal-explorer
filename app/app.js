@@ -86,8 +86,6 @@ function fmtZoom(lz) {
   return `10^${Math.round(lz * 0.30103)}×`;
 }
 
-// A set whose reference orbit has no arbitrary-precision form carries its own
-// ceiling, so the camera stops where its arithmetic does.
 function clampLogZoom(lz, set = state.set) {
   return Math.min(SETS[set].maxLogZoom ?? Infinity, Math.max(MIN_LOG_ZOOM, lz));
 }

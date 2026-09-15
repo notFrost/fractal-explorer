@@ -531,27 +531,12 @@ export function collatzOrbitBig(cx, cy, bits, maxIter, out) {
   }
 }
 
-// Pacman: z ← z^z + c, with 0^0 taken as 1, so Z_1 = 1 + C for every pixel.
-// z^z is exp(z ln z) on the principal branch, which has no fixed-point form to
-// iterate, so there is no BigInt twin; SETS.pacman.maxLogZoom caps the camera
-// where double precision runs out. Two texels per step:
-//   (Z_n, ln|Z_n|, arg Z_n) and (Z_n^Z_n, Z_n − Z_1).
-// The offset is from Z_1 rather than Z_0 because ln Z_0 is undefined, and it is
-// formed in double before it is stored, so rebasing a pixel does not go through
-// a float32 subtraction of two nearly equal values — Webb's trick from Z_0.
-//
-// The orbit bails at the drawing bailout rather than Mandelbrot's 1e10: past
-// it the clamped Z^Z means nothing. PAC_EXP has to match the shader's cexpm1
-// exactly, or the reference and the pixels drift apart.
-const PAC_EXP = 30;   // |Z^Z| ≤ 1.07e13: past the bailout, still inside float32
+const PAC_EXP = 30;
 
 export function pacmanOrbitDouble(cx, cy, maxIter, out) {
-  // Index 0 is Z_0 = 0 and the six floats beside it are unused: ln 0 is
-  // undefined and the shader starts at index 1.
   for (let k = 0; k < 2 * STRIDE; k++) out[k] = 0;
   const z1r = 1 + cx;
   const z1i = cy;
-  // Z_n^Z_n, carried from the texel it was written to into the next step.
   let pr = 1;
   let pi = 0;
   let n = 1;

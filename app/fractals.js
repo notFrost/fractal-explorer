@@ -66,11 +66,7 @@ export const SETS = {
   pacman: {
     name: 'Pacman',
     formula: 'z ← zᶻ + c',
-    // z^z has no fixed-point form to iterate in BigInt, so the reference orbit
-    // stops where double precision does and the camera stops with it.
     maxLogZoom: BIG_LOG_ZOOM,
-    // Frames re ∈ [−1.5, 3.5]: the mouth, whose apex is at re ≈ 0.17, and
-    // the right edge of the head at re ≈ 2.8.
     home: { x: 1, y: 0, zoom: 96 },
     bookmarks: [],
   },
