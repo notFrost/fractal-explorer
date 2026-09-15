@@ -25,9 +25,6 @@ uniform int u_palette;     // which colourway palette() draws, see palettes.js
 
 out vec4 outColor;
 
-// Colourways. Each takes the smooth escape count t and cycles on the
-// original's period of 100, so they differ only in hue. u_palette picks one;
-// the indices are listed in palettes.js. Inside points stay black in all.
 const float PERIOD = 100.0;
 
 vec3 hsv(float h, float s, float v) {
@@ -35,15 +32,12 @@ vec3 hsv(float h, float s, float v) {
   return v * mix(vec3(1.0), rgb, s);
 }
 
-// 0. Pen: hue (t + 90) mod 100 on a 0..100 wheel, brightness t * 5 clamped.
 vec3 penPalette(float t) {
   float h = fract((t + 90.0) / PERIOD);
   float v = clamp(t * 5.0, 0.0, 100.0) / 100.0;
   return hsv(h, 1.0, v);
 }
 
-// Gradient through five stops at positions pos; u in [0, 1). Wraps back to
-// the first stop so cycling has no seam.
 vec3 ramp5(float u, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4, vec4 pos) {
   if (u < pos.x) return mix(c0, c1, u / pos.x);
   if (u < pos.y) return mix(c1, c2, (u - pos.x) / (pos.y - pos.x));
@@ -52,11 +46,8 @@ vec3 ramp5(float u, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4, vec4 pos) {
   return mix(c4, c0, (u - pos.w) / (1.0 - pos.w));
 }
 
-// Triangle wave: 0 → 1 → 0 over one period, so an open-ended ramp cycles without a seam.
 float tri(float u) { return 1.0 - abs(2.0 * fract(u) - 1.0); }
 
-// 1. Classic: the Ultra Fractal default that the well-known Wikipedia
-// Mandelbrot renders use. Navy → blue → white → orange → near black.
 vec3 classicPalette(float t) {
   return ramp5(fract(t / PERIOD),
     vec3(0.0, 0.027, 0.392), vec3(0.125, 0.42, 0.796), vec3(0.929, 1.0, 1.0),
@@ -64,8 +55,6 @@ vec3 classicPalette(float t) {
     vec4(0.16, 0.42, 0.6425, 0.8575));
 }
 
-// 2. Ember: black → maroon → red-orange → amber → cream, folded so it burns
-// up and cools back down each period.
 vec3 emberPalette(float t) {
   float u = tri(t / PERIOD) * 0.999;
   return ramp5(u,
@@ -74,7 +63,6 @@ vec3 emberPalette(float t) {
     vec4(0.25, 0.5, 0.75, 0.999));
 }
 
-// 3. Abyss: deep sea to sand. Ink blue → teal → sea green → foam → sand, folded.
 vec3 abyssPalette(float t) {
   float u = tri(t / PERIOD) * 0.999;
   return ramp5(u,
@@ -83,8 +71,6 @@ vec3 abyssPalette(float t) {
     vec4(0.25, 0.5, 0.75, 0.999));
 }
 
-// 4. Ultraviolet: the site's own accents. Pen blue #0400ff → violet →
-// magenta #ff2bd6 → pale pink, cycling, with a dark trough between cycles.
 vec3 ultravioletPalette(float t) {
   return ramp5(fract(t / PERIOD),
     vec3(0.02, 0.0, 0.08), vec3(0.016, 0.0, 1.0), vec3(0.48, 0.0, 1.0),
@@ -92,8 +78,6 @@ vec3 ultravioletPalette(float t) {
     vec4(0.2, 0.45, 0.7, 0.9));
 }
 
-// 5. Ink: no hue at all. Charcoal contour bands on paper, like a line-printer
-// plot. Each band of eight iterations fades in and out so edges stay soft.
 vec3 inkPalette(float t) {
   float band = fract(t / 8.0);
   float edge = smoothstep(0.0, 0.08, band) * (1.0 - smoothstep(0.92, 1.0, band));
@@ -101,7 +85,6 @@ vec3 inkPalette(float t) {
   return shade * vec3(1.0, 0.97, 0.9);
 }
 
-// 6. Chalk: Ink inverted. Pale contour lines on slate, same eight-iteration bands.
 vec3 chalkPalette(float t) {
   float band = fract(t / 8.0);
   float edge = smoothstep(0.0, 0.08, band) * (1.0 - smoothstep(0.92, 1.0, band));
@@ -123,7 +106,6 @@ vec3 palette(float t) {
 vec2 csq(vec2 z) { return vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y); }
 vec2 cmul(vec2 a, vec2 b) { return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
 
-// Smooth escape count for bailout |z|^2 > 1e4, given log(|z|^2).
 float smoothT(int steps, float logzz) {
   return float(steps) + 1.0 - log2(0.5 * logzz);
 }
@@ -141,19 +123,15 @@ bool inCardioidOrBulb(vec2 c) {
 }
 `;
 
-// Floating point with its own exponent, for deltas far below float32 range.
-// The mantissa is a vec2 normalised so max(|m.x|, |m.y|) is in [0.5, 1).
 export const FE_LIB = `
 const int EMIN = -1000000;
 struct FE { vec2 m; int e; };
 
-// 2^k for |k| up to about 250, built from two exponent-field constructions.
 float pow2(int k) {
   int h = k >> 1;
   return intBitsToFloat((h + 127) << 23) * intBitsToFloat((k - h + 127) << 23);
 }
 
-// Normalise. Denormals count as zero.
 FE fe(vec2 v, int e) {
   float a = max(abs(v.x), abs(v.y));
   int ex = (floatBitsToInt(a) >> 23) & 255;
