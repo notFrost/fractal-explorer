@@ -131,6 +131,22 @@ float smoothT(int steps, float logzz) {
 }
 
 vec4 refAt(int i) { return texelFetch(u_ref, ivec2(i & 1023, i >> 10), 0); }
+
+// Mandelbrot's two largest interior components have closed forms: the main
+// cardioid and the period-2 bulb at −1. Points in either never escape, so they
+// are the ones that cost a full u_maxIter. SKIN holds the test clear of both
+// boundaries — u_center is float32, and a point called inside in error would
+// paint solid black over real structure. Being called outside in error only
+// costs the iterations we were trying to save.
+const float SKIN = 1e-5;
+
+bool inCardioidOrBulb(vec2 c) {
+  vec2 b = c + vec2(1.0, 0.0);
+  if (dot(b, b) < 0.0625 - SKIN) return true;
+  float x = c.x - 0.25;
+  float q = x * x + c.y * c.y;
+  return q * (q + x) < 0.25 * c.y * c.y - SKIN;
+}
 `;
 
 // Floating point with its own exponent, for deltas far below float32 range.
@@ -198,8 +214,12 @@ float escape(vec2 dc) {
 }
 
 void main() {
-  vec2 dc = (gl_FragCoord.xy - 0.5 * u_res + u_offset) * u_px;
-  outColor = vec4(palette(escape(dc)), 1.0);
+  vec2 px = gl_FragCoord.xy - 0.5 * u_res;
+  if (inCardioidOrBulb(u_center + px * u_px)) {
+    outColor = vec4(palette(0.0), 1.0);
+    return;
+  }
+  outColor = vec4(palette(escape((px + u_offset) * u_px)), 1.0);
 }`;
 
 // Same algorithm with the delta carried as mantissa × 2^exponent so it can be
@@ -225,6 +245,12 @@ float escape(FE dc) {
 }
 
 void main() {
+  // Past 2^90 the screen is narrower than float32 can resolve, so every pixel
+  // shares one c and the test is really asking about the camera centre.
+  if (inCardioidOrBulb(u_center)) {
+    outColor = vec4(palette(0.0), 1.0);
+    return;
+  }
   vec2 px = gl_FragCoord.xy - 0.5 * u_res + u_offset;
   outColor = vec4(palette(escape(fe(px * u_pxm, u_pxe))), 1.0);
 }`;
@@ -896,6 +922,9 @@ export class Renderer {
       gl.uniform1f(prog.u.u_pxm, m);
       gl.uniform1i(prog.u.u_pxe, e);
       gl.uniform1f(prog.u.u_px, m * 2 ** e);
+      // Only Mandelbrot's shader reads this, to place a pixel against the
+      // cardioid; elsewhere the location is null and the call does nothing.
+      gl.uniform2f(prog.u.u_center, cam.xDouble(), cam.yDouble());
       this.tier = tier;
     } else {
       name = shaders.float;
