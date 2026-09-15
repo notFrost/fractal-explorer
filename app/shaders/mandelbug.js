@@ -1,7 +1,5 @@
 import { FE_LIB } from './common.js';
 
-// MandelBug: Mandelbrot with a bug in the imaginary part. 2·Zr·Zi was written
-// 2(Zr + Zi), so Zr' = Zr² − Zi² + Cr but Zi' = 2(Zr + Zi) + Ci.
 export const MANDELBUG = `
 float escape(vec2 c) {
   vec2 z = vec2(0.0);
@@ -18,13 +16,6 @@ void main() {
   outColor = vec4(palette(escape(c)), 1.0);
 }`;
 
-// MandelBug by perturbation. With z = Z + d and c = C + dc, expanding gives
-//   dr' = 2 Zr dr + dr² − 2 Zi di − di² + dcr = Re[(2Z + d) d] + dcr
-//   di' = 2 (dr + di) + dci
-// The real part is Mandelbrot's own; the imaginary part is linear, so it is
-// exact whatever the scale. Nothing cancels beyond Mandelbrot's near-origin
-// case, and Z_0 = 0, so Zhuoran rebasing carries over unchanged: when the
-// pixel's orbit passes closer to the origin than its delta, set d = z, m = 0.
 export const BUG_PERT = `
 float escape(vec2 dc) {
   vec2 d = vec2(0.0);
@@ -48,9 +39,6 @@ void main() {
   outColor = vec4(palette(escape(dc)), 1.0);
 }`;
 
-// The same recurrence with floatexp deltas. Both parts keep the delta's own
-// exponent: the quadratic part multiplies the mantissa by 2Z + d in float32,
-// the linear part is a mantissa sum at the same scale.
 export const BUG_FE = FE_LIB + `
 float escape(FE dc) {
   FE d = FE(vec2(0.0), EMIN);
