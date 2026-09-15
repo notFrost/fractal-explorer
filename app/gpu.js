@@ -132,7 +132,7 @@ float smoothT(int steps, float logzz) {
 
 vec4 refAt(int i) { return texelFetch(u_ref, ivec2(i & 1023, i >> 10), 0); }
 
-const float SKIN = 1e-5;
+const float SKIN = 1e-5;  // wider than float32 error near the boundary
 
 bool inCardioidOrBulb(vec2 c) {
   vec2 b = c + vec2(1.0, 0.0);
