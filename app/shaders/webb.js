@@ -18,14 +18,6 @@ void main() {
   vec2 c = u_center + (gl_FragCoord.xy - 0.5 * u_res) * u_px;
   outColor = vec4(palette(escape(c)), 1.0);
 }`;
-
-// Webb by perturbation. The recurrence has two terms, so the pixel carries a
-// delta on each: z = Z + d, and the previous value p = P + e.
-// d_{n+1} = (2 Z_n + d_n) d_n + e_n, e_{n+1} = d_n.
-// The map has no critical point, so the delta never loses precision the way
-// Mandelbrot's does near the origin; rebasing is still needed so pixels can
-// outlive the reference. A rebase moves the pixel onto the reference's start
-// state (Z_0, 0). The offset Z_n − Z_0 comes from the texture at full precision.
 export const WEBB_PERT = `
 float escape(vec2 dc) {
   vec2 d = dc;
