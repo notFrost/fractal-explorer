@@ -2,10 +2,10 @@
 
 **[Live demo](https://fractal-explorer-six.vercel.app/app/)**
 
-A web port of a PenguinMod project (`FractalExplorer.pmp`). Six escape-time
-sets drawn on the GPU with WebGL2 fragment shaders. All six zoom without a
-precision limit. The original's camera model, pen colours, and controls carry
-over; the CPU pen-plotting does not.
+A web port of a PenguinMod project (`FractalExplorer.pmp`). Seven escape-time
+sets drawn on the GPU with WebGL2 fragment shaders. Six of them zoom without a
+precision limit; Pacman stops at 2^40. The original's camera model, pen
+colours, and controls carry over; the CPU pen-plotting does not.
 
 Try [10^301 zoom](https://fractal-explorer-six.vercel.app/app/#mandelbrot@0,1,2^1000.000)
 to see the arbitrary-precision path working: a 1128-bit reference orbit, drawn
@@ -82,15 +82,16 @@ range. The shader carries each delta as `m × 2^e`, normalised so the mantissa
 stays in [0.5, 1), built from `floatBitsToInt` and `intBitsToFloat` since
 GLSL ES 3.00 lacks `frexp` and `ldexp`.
 
-There is no upper zoom limit in the code. In practice the cost grows with
-depth: the iteration budget is `30 × log2 zoom`, capped at 50 000 (×8 with
-the detail buttons, capped at 100 000), and the reference orbit costs about
-90 ms at 10^300. At 10^300 a 1280×800 frame is roughly 80 strips and under a
-second on an RTX 2060.
+There is no upper zoom limit in the code, bar Pacman's. In practice the cost
+grows with depth: the iteration budget is `30 × log2 zoom`, capped at 50 000
+(×8 with the detail buttons, capped at 100 000), and the reference orbit costs
+about 90 ms at 10^300. At 10^300 a 1280×800 frame is roughly 80 strips and
+under a second on an RTX 2060.
 
 **Webb**, **Collatz**, **Julia**, **Burning Ship** and **MandelBug** iterate
 directly in float32 up to 10^6 zoom and use the same three tiers beyond it,
-with their own reference orbits and shaders.
+with their own reference orbits and shaders. **Pacman** is perturbed at every
+zoom, like Mandelbrot, but has only the first tier.
 
 Webb's two-term recurrence carries a delta on both terms,
 `d ← (2Z + d) d + e, e ← d`. The map has no critical point, so the delta never
@@ -136,6 +137,26 @@ scale: `2(dr + di) + dci`. Nothing cancels that Mandelbrot does not already
 cancel, and `Z₀ = 0`, so its rebasing is used unchanged. The set is unbounded:
 every `c` on the line `Im c = −Re c` is its own fixed point, so the whole line
 belongs to it. The menu opens on the bulk instead, around `−0.97 + 0.97i`.
+
+Pacman iterates `z ← z^z + c`, taking `0^0` as 1, so `z₁ = 1 + c` everywhere.
+With `z^z = exp(z ln z)` on the principal branch and `L = Log1p(d/Z)`, the
+delta is `d ← Z^Z expm1(Z·L + d·(ln Z + L)) + dc`, and nothing in it cancels
+provided `log1p` and `expm1` are the real ones. Splitting the log as
+`Log Z + Log1p(d/Z)` only holds while the two sum inside `(−π, π]`, so the
+shader wraps the imaginary part of `L` to keep it there. Rebasing lands on
+index 1 rather than 0, since `ln Z₀` is undefined. The zoom stops at 2^40,
+where the other sets hand their reference to BigInt: Pacman's would need
+complex `exp` and `ln` at 1000+ bits on every step, seconds to minutes a frame.
+
+The set is unbounded. Far to the left, up or down, `Re(z ln z) → −∞`, so
+`z^z → 0` and the orbit settles near `c`; only a wedge on the right escapes,
+the mouth, repeating along the imaginary axis. Crossing the bailout is not
+divergence either: orbits reach `|z| ~ 1e13` and are back near `0.5` a step
+later. That overshoot sends a fifth of the escaped plane to black under
+Mandelbrot's smooth count, so Pacman interpolates the crossing in `log|z|`
+between the last two steps, which stays in `[0, 1)`. The same violence splits
+orbits started one ulp apart to `1e-8` within about 320 steps, so where escape
+takes longer the picture is dust under any double arithmetic.
 
 **Colour** is one of seven colourways, all cycling on the original's
 100-iteration period with inside points black. Pen is the original pen

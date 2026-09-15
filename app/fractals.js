@@ -1,5 +1,13 @@
 // Set metadata and the iteration budget.
 
+export const MIN_LOG_ZOOM = Math.log2(10);
+export const MAX_ITER = 100000;
+
+// Zoom thresholds for the precision tiers (log2).
+export const FLOAT_LOG_ZOOM = Math.log2(1e6);   // beyond this Webb and Collatz switch from direct float32 to perturbation
+export const BIG_LOG_ZOOM = 40;   // beyond this the reference orbit is computed in BigInt
+export const FE_LOG_ZOOM = 90;    // beyond this pixel deltas carry their own exponent
+
 // `home` is where a set opens from the menu, and what its card thumbnail shows.
 export const SETS = {
   mandelbrot: {
@@ -55,15 +63,14 @@ export const SETS = {
     home: { x: -0.97, y: 0.97, zoom: 157 },
     bookmarks: [{ x: 0, y: 0, zoom: 100 }],
   },
+  pacman: {
+    name: 'Pacman',
+    formula: 'z ← zᶻ + c',
+    maxLogZoom: BIG_LOG_ZOOM,
+    home: { x: 1, y: 0, zoom: 96 },
+    bookmarks: [],
+  },
 };
-
-export const MIN_LOG_ZOOM = Math.log2(10);
-export const MAX_ITER = 100000;
-
-// Zoom thresholds for the precision tiers (log2).
-export const FLOAT_LOG_ZOOM = Math.log2(1e6);   // beyond this Webb and Collatz switch from direct float32 to perturbation
-export const BIG_LOG_ZOOM = 40;   // beyond this the reference orbit is computed in BigInt
-export const FE_LOG_ZOOM = 90;    // beyond this pixel deltas carry their own exponent
 
 // Budget grows with zoom depth; the detail multiplier is the user's override.
 // Sets with their own ceiling (Collatz stops at 500) clamp to it.
