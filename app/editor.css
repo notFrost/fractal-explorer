@@ -55,6 +55,11 @@
   letter-spacing: 0.08em;
 }
 
+.editor-name {
+  font-size: 1.05rem;
+  padding: 0.6rem 0.7rem;
+}
+
 /* The coloured line sits under a transparent input, which keeps the caret,
    the selection and the scroll. Both boxes take the same metrics so the two
    layers land character on character. */
