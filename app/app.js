@@ -16,7 +16,6 @@ const state = {
   // Colourway key, see palettes.js. Rides in the URL as ?palette= and is
   // remembered per browser.
   palette: DEFAULT_PALETTE,
-  // The three lines of Create Fractal, as typed. Empty until one is rendered.
   formula: '',
   seedZ: '',
   seedC: '',
@@ -438,9 +437,6 @@ const PREVIEW_MAX_PX = 640;
 const PREVIEW_DELAY = 250;
 const NEST_COLOURS = 6;
 
-// The three lines of Create Fractal: the iteration, then the values the pixel
-// starts z and c at. Each has its own parser, since the starting values speak
-// x and y where the iteration speaks z and c.
 const FIELDS = [
   { key: 'formula', param: 'f', label: 'the formula', parse: parseFormula, tokens: formulaTokens },
   { key: 'seedZ', param: 'z', label: 'z₀', parse: parseSeed, tokens: seedTokens },
@@ -448,7 +444,6 @@ const FIELDS = [
 ];
 const SEED_FIELDS = FIELDS.slice(1);
 
-// The text and GLSL of the last formula rendered. Cancelling goes back to it.
 let committed = null;
 
 const TOKEN_CLASS = {
@@ -478,8 +473,6 @@ function paintField(field) {
 
 const editorTexts = () => Object.fromEntries(FIELDS.map((f) => [f.key, editor.input[f.key].value]));
 
-// Reads all three lines, naming the field in the message: one error line
-// serves the lot.
 function parseCustom(texts) {
   const parsed = {};
   for (const f of FIELDS) {
@@ -502,8 +495,6 @@ const DEFAULT_GLSL = Object.fromEntries(FIELDS.map((f) => [f.key, f.parse(DEFAUL
 
 const usual = (parsed, field) => parsed[field.key].glsl === DEFAULT_GLSL[field.key];
 
-// The line above the HUD and under the preview: the iteration, plus either
-// starting value that is not the usual one.
 function customLabel(parsed) {
   const parts = [`z ← ${parsed.formula.text}`];
   for (const f of SEED_FIELDS) {
@@ -512,8 +503,6 @@ function customLabel(parsed) {
   return parts.join('  ·  ');
 }
 
-// A formula whose c does not move with the pixel makes the pixel z₀ instead:
-// that is a Julia set rather than a Mandelbrot one, and it sits on the origin.
 function customHome(parsed) {
   const movesWithPixel = (key) => parsed[key].glsl.includes('p.');
   return !movesWithPixel('seedC') && movesWithPixel('seedZ')
@@ -521,8 +510,6 @@ function customHome(parsed) {
     : { x: -0.7, y: 0, zoom: 135 };
 }
 
-// The formula always rides in the URL; a starting value only when it is not
-// the usual one, so plain links stay short.
 function writeCustomUrl(texts, parsed) {
   const url = new URL(location.href);
   url.searchParams.set('f', texts.formula);
@@ -943,8 +930,6 @@ function showViewer(set, view) {
   requestRender();
 }
 
-// Menu leads back the way the set was opened: a custom set to the formula
-// that made it, everything else to the menu.
 function leaveViewer() {
   if (state.set === 'custom') showEditor();
   else showMenu();

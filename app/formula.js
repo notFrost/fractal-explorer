@@ -1,6 +1,5 @@
 // Turns a typed iteration formula into a GLSL expression for the next z, and
-// into the coloured token stream the editor paints behind the input. The same
-// grammar reads the starting values of z and c, which speak x and y instead.
+// into the coloured token stream the editor paints behind the input.
 
 const SUPER = {
   '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
@@ -110,8 +109,6 @@ function lex(s) {
   return out;
 }
 
-// Letters written side by side multiply, so x+yi reads as x + y·i. Only a run
-// where every letter is known splits; anything else stays one name.
 function letterValues(name, mode) {
   const parts = [...name].map((ch) => (
     mode.vars[ch] ? complex(mode.vars[ch]) : CONSTS[ch] ? CONSTS[ch]() : null
