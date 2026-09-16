@@ -209,8 +209,13 @@ under an id of `saved1`, `saved2` and so on, a card and thumbnail at the end
 of the menu, and a hash of its own, `#saved2@x,y,zoom`. Its Menu button goes
 to the menu rather than back to the editor. The list is kept in this browser's
 local storage, so it survives a reload but does not travel with a link, and a
-`#saved2@` link only opens for the browser that saved it. Nothing removes a
-card yet, short of clearing the site's storage.
+`#saved2@` link only opens for the browser that saved it.
+
+The × in the corner of a saved card removes it. It puts the question over the
+card first, and Cancel or Esc backs out. Delete drops the card, its shader and
+its stored entry. Ids count up rather than filling the gap a deletion leaves,
+so an old `#saved1@` link falls back to the menu instead of opening a
+different fractal.
 
 What it reads: `z` and `c`, decimal numbers, `i`, `pi` and `e`; `+ - * / ^`
 with brackets, two values side by side for multiplication, letters written

@@ -651,7 +651,13 @@ $('#create').addEventListener('click', showEditor);
 
 const savedFractals = readSaved();
 
-const defaultName = () => `Fractal ${savedFractals.length + 1}`;
+function defaultName() {
+  const taken = new Set(savedFractals.map((f) => f.name));
+  for (let n = savedFractals.length + 1; ; n++) {
+    const name = `Fractal ${n}`;
+    if (!taken.has(name)) return name;
+  }
+}
 
 function addSavedSet(fractal) {
   if (!renderer) return 'this browser has no WebGL2';
@@ -669,6 +675,16 @@ function addSavedSet(fractal) {
   registerSet(fractal.id, { name: fractal.name, formula: customLabel(parsed), home: customHome(parsed) });
   makeCard(fractal.id);
   return null;
+}
+
+function deleteSaved(id) {
+  const at = savedFractals.findIndex((f) => f.id === id);
+  if (at >= 0) {
+    savedFractals.splice(at, 1);
+    writeSaved(savedFractals);
+  }
+  dropSavedSet(id);
+  $('#create').focus();
 }
 
 function dropSavedSet(id) {
@@ -1025,6 +1041,7 @@ function renderCards() {
 
 function makeCard(set) {
   const li = document.createElement('li');
+  li.className = 'card-slot';
   const card = document.createElement('button');
   card.type = 'button';
   card.className = 'card';
@@ -1041,8 +1058,54 @@ function makeCard(set) {
   formula.className = 'card-formula';
   formula.textContent = SETS[set].formula;
   card.append(thumb, name, formula);
-  li.append(card);
+  li.append(card, ...deleteControls(set, li));
   cards.append(li);
+}
+
+// The × and the question that replaces it are siblings of the card, since a
+// button cannot hold another one.
+function deleteControls(set, slot) {
+  const question = `Delete ${SETS[set].name}?`;
+  const ask = document.createElement('button');
+  ask.type = 'button';
+  ask.className = 'card-delete';
+  ask.title = question;
+  ask.setAttribute('aria-label', question);
+  ask.textContent = '×';
+
+  const panel = document.createElement('div');
+  panel.className = 'card-confirm';
+  panel.hidden = true;
+  panel.setAttribute('role', 'group');
+  panel.setAttribute('aria-label', question);
+  const text = document.createElement('p');
+  text.className = 'card-confirm-text';
+  text.textContent = question;
+  const yes = document.createElement('button');
+  yes.type = 'button';
+  yes.className = 'btn btn-accent';
+  yes.textContent = 'Delete';
+  const no = document.createElement('button');
+  no.type = 'button';
+  no.className = 'btn';
+  no.textContent = 'Cancel';
+  const row = document.createElement('div');
+  row.className = 'card-confirm-row';
+  row.append(yes, no);
+  panel.append(text, row);
+
+  const open = (on) => {
+    panel.hidden = !on;
+    ask.hidden = on;
+    slot.classList.toggle('asking', on);
+    (on ? yes : ask).focus();
+  };
+  const close = () => open(false);
+  ask.addEventListener('click', () => open(true));
+  no.addEventListener('click', close);
+  panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  yes.addEventListener('click', () => deleteSaved(set));
+  return [ask, panel];
 }
 
 function homeView(set) {

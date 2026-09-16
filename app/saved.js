@@ -25,12 +25,13 @@ export function writeSaved(list) {
   }
 }
 
+// Counts up rather than filling gaps, so a hash saved against a deleted
+// fractal does not open a different one.
 export function freeId(list) {
-  const taken = new Set(list.map((f) => f.id));
-  for (let n = 1; ; n++) {
-    const id = `saved${n}`;
-    if (!taken.has(id) && !SETS[id]) return id;
-  }
+  const used = list.map((f) => Number(/^saved(\d+)$/.exec(f.id)?.[1] ?? 0));
+  let n = Math.max(0, ...used) + 1;
+  while (SETS[`saved${n}`]) n++;
+  return `saved${n}`;
 }
 
 export function registerSet(id, { name, formula, home }) {
