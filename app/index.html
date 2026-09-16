@@ -92,25 +92,57 @@
   <main id="editor" class="page" hidden>
     <header class="page-head">
       <h1 class="title">Create<br />Fractal</h1>
-      <p class="lede">One formula, iterated from z = 0 with c at the pixel. Everything else is fixed for now.</p>
+      <p class="lede">One formula, iterated until it escapes, from starting values you set.</p>
     </header>
 
     <div class="editor">
       <form id="editor-form" class="editor-form" autocomplete="off">
         <label class="editor-label" for="formula">Formula</label>
-        <input id="formula" class="input editor-input" type="text" spellcheck="false" autocapitalize="off"
-               placeholder="Z_(n+1) = Z_(n)^2 + C" aria-describedby="formula-help" />
+        <div class="editor-field">
+          <div id="formula-ink" class="editor-ink" aria-hidden="true"></div>
+          <input id="formula" class="input editor-input" type="text" spellcheck="false" autocapitalize="off"
+                 placeholder="Z_(n+1) = Z_(n)^2 + C" aria-describedby="formula-help" />
+        </div>
         <p id="formula-help" class="editor-help">
-          <span>z and c, numbers, i, pi, e</span>
-          <span>+ − × ÷ ^ and brackets</span>
-          <span>abs re im conj exp log sqrt sin cos tan sinh cosh tanh</span>
+          <span class="tok-var">z c</span>
+          <span class="tok-num">numbers</span>
+          <span class="tok-const">i pi e</span>
+          <span class="tok-op">+ − × ÷ ^</span>
+          <span class="tok-nest-0">( ) and | | nest in colour</span>
+          <span class="tok-func">abs re im conj exp log sqrt sin cos tan sinh cosh tanh</span>
+          <span>|z| is abs z</span>
         </p>
+
+        <div class="editor-seeds">
+          <div class="editor-seed">
+            <label class="editor-label" for="seed-z">z₀</label>
+            <div class="editor-field">
+              <div id="seed-z-ink" class="editor-ink" aria-hidden="true"></div>
+              <input id="seed-z" class="input editor-input" type="text" spellcheck="false" autocapitalize="off"
+                     placeholder="0+0i" aria-describedby="seed-help" />
+            </div>
+          </div>
+          <div class="editor-seed">
+            <label class="editor-label" for="seed-c">c</label>
+            <div class="editor-field">
+              <div id="seed-c-ink" class="editor-ink" aria-hidden="true"></div>
+              <input id="seed-c" class="input editor-input" type="text" spellcheck="false" autocapitalize="off"
+                     placeholder="x+yi" aria-describedby="seed-help" />
+            </div>
+          </div>
+        </div>
+        <p id="seed-help" class="editor-help">
+          <span class="tok-var">x y</span>
+          <span>the real and imaginary parts of the point being checked</span>
+          <span>z₀ = 0 with c = x+yi is the Mandelbrot set</span>
+        </p>
+
         <div class="editor-actions">
           <button type="submit" class="btn btn-accent">Render</button>
           <button type="button" id="editor-cancel" class="btn">Cancel</button>
           <span id="formula-error" class="goto-error" role="alert"></span>
         </div>
-        <p class="editor-fixed">Fixed in this first version: z starts at 0, c is the pixel, the orbit escapes at |z| &gt; 100, and the zoom stops at 10⁶.</p>
+        <p class="editor-fixed">Fixed in this first version: the orbit escapes at |z| &gt; 100, and the zoom stops at 10⁶.</p>
       </form>
 
       <aside id="preview" class="editor-preview">

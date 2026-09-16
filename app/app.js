@@ -2,7 +2,7 @@ import { SETS, MIN_LOG_ZOOM, iterationsFor } from './fractals.js';
 import { Camera } from './precision.js';
 import { Renderer } from './gpu.js';
 import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palettes.js';
-import { parseFormula } from './formula.js';
+import { parseFormula, parseSeed, formulaTokens, seedTokens } from './formula.js';
 
 // ---------- State ----------
 
@@ -17,6 +17,8 @@ const state = {
   // remembered per browser.
   palette: DEFAULT_PALETTE,
   formula: '',
+  seedZ: '',
+  seedC: '',
 };
 
 const $ = (s) => document.querySelector(s);
@@ -51,11 +53,13 @@ const juliaUi = {
   error: $('#julia-error'),
 };
 const setLabel = $('#set-c');
+const backBtn = $('#back');
 const editor = {
   page: $('#editor'),
   form: $('#editor-form'),
-  input: $('#formula'),
   error: $('#formula-error'),
+  input: { formula: $('#formula'), seedZ: $('#seed-z'), seedC: $('#seed-c') },
+  ink: { formula: $('#formula-ink'), seedZ: $('#seed-z-ink'), seedC: $('#seed-c-ink') },
 };
 const preview = {
   box: $('#preview'),
@@ -424,40 +428,127 @@ juliaUi.presets.replaceChildren(
 
 // ---------- The formula editor ----------
 
-const DEFAULT_FORMULA = 'Z_(n+1) = Z_(n)^2 + C';
+const DEFAULTS = {
+  formula: 'Z_(n+1) = Z_(n)^2 + C',
+  seedZ: '0',
+  seedC: 'x+yi',
+};
 const PREVIEW_MAX_PX = 640;
 const PREVIEW_DELAY = 250;
+const NEST_COLOURS = 6;
 
-let committedExpr = null;
+const FIELDS = [
+  { key: 'formula', param: 'f', label: 'the formula', parse: parseFormula, tokens: formulaTokens },
+  { key: 'seedZ', param: 'z', label: 'z₀', parse: parseSeed, tokens: seedTokens },
+  { key: 'seedC', param: 'c', label: 'c', parse: parseSeed, tokens: seedTokens },
+];
+const SEED_FIELDS = FIELDS.slice(1);
 
-function applyFormula(text) {
+let committed = null;
+
+const TOKEN_CLASS = {
+  var: 'tok-var',
+  num: 'tok-num',
+  const: 'tok-const',
+  func: 'tok-func',
+  op: 'tok-op',
+  assign: 'tok-assign',
+  index: 'tok-index',
+  bad: 'tok-bad',
+};
+
+function paintField(field) {
+  const input = editor.input[field.key];
+  const ink = editor.ink[field.key];
+  ink.replaceChildren(...field.tokens(input.value).map((tok) => {
+    const span = document.createElement('span');
+    span.className = tok.depth === undefined
+      ? TOKEN_CLASS[tok.kind] ?? ''
+      : `tok-nest-${tok.depth % NEST_COLOURS}`;
+    span.textContent = tok.text;
+    return span;
+  }));
+  ink.scrollLeft = input.scrollLeft;
+}
+
+const editorTexts = () => Object.fromEntries(FIELDS.map((f) => [f.key, editor.input[f.key].value]));
+
+function parseCustom(texts) {
+  const parsed = {};
+  for (const f of FIELDS) {
+    try {
+      parsed[f.key] = f.parse(String(texts[f.key] ?? '').trim());
+    } catch (err) {
+      throw new Error(`${f.label}: ${err.message}`);
+    }
+  }
+  return parsed;
+}
+
+const shaderParts = (parsed) => ({
+  iter: parsed.formula.glsl,
+  seedZ: parsed.seedZ.glsl,
+  seedC: parsed.seedC.glsl,
+});
+
+const DEFAULT_GLSL = Object.fromEntries(FIELDS.map((f) => [f.key, f.parse(DEFAULTS[f.key]).glsl]));
+
+const usual = (parsed, field) => parsed[field.key].glsl === DEFAULT_GLSL[field.key];
+
+function customLabel(parsed) {
+  const parts = [`z ← ${parsed.formula.text}`];
+  for (const f of SEED_FIELDS) {
+    if (!usual(parsed, f)) parts.push(`${f.label} = ${parsed[f.key].text}`);
+  }
+  return parts.join('  ·  ');
+}
+
+function customHome(parsed) {
+  const movesWithPixel = (key) => parsed[key].glsl.includes('p.');
+  return !movesWithPixel('seedC') && movesWithPixel('seedZ')
+    ? { x: 0, y: 0, zoom: 100 }
+    : { x: -0.7, y: 0, zoom: 135 };
+}
+
+function writeCustomUrl(texts, parsed) {
+  const url = new URL(location.href);
+  url.searchParams.set('f', texts.formula);
+  for (const f of SEED_FIELDS) {
+    if (usual(parsed, f)) url.searchParams.delete(f.param);
+    else url.searchParams.set(f.param, texts[f.key]);
+  }
+  history.replaceState(null, '', url);
+}
+
+function applyCustom(texts) {
   if (!renderer) return 'this browser has no WebGL2';
+  const trimmed = Object.fromEntries(FIELDS.map((f) => [f.key, String(texts[f.key] ?? '').trim()]));
   let parsed;
   try {
-    parsed = parseFormula(text);
+    parsed = parseCustom(trimmed);
   } catch (err) {
     return err.message;
   }
+  const parts = shaderParts(parsed);
   try {
-    renderer.setCustom(parsed.glsl);
+    renderer.setCustom(parts);
   } catch {
     return 'the GPU would not compile that formula';
   }
-  committedExpr = parsed.glsl;
-  state.formula = String(text).trim();
-  SETS.custom.formula = `z ← ${parsed.text}`;
-  const url = new URL(location.href);
-  url.searchParams.set('f', state.formula);
-  history.replaceState(null, '', url);
+  committed = { texts: trimmed, parts };
+  Object.assign(state, trimmed);
+  SETS.custom.formula = customLabel(parsed);
+  SETS.custom.home = customHome(parsed);
+  writeCustomUrl(trimmed, parsed);
   return null;
 }
 
-const hasCustom = () => Boolean(renderer?.customExpr);
+const hasCustom = () => Boolean(renderer?.custom);
 
 let previewTimer = 0;
 let previewKey = '';
 
-function drawPreview(expr) {
+function drawPreview(parts, home) {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const c = preview.canvas;
   const w = Math.min(PREVIEW_MAX_PX, Math.round((c.clientWidth || 320) * dpr));
@@ -465,43 +556,43 @@ function drawPreview(expr) {
   c.height = Math.round(w * 0.75);
   canvas.width = c.width;
   canvas.height = c.height;
-  renderer.setCustom(expr);
-  const { x, y, zoom } = SETS.custom.home;
-  const cam = new Camera(x, y, zoom);
+  renderer.setCustom(parts);
+  const cam = new Camera(home.x, home.y, home.zoom);
   renderer.renderAll({ set: 'custom', cam, maxIter: iterationsFor(cam.lz, 1, 'custom') });
   c.getContext('2d').drawImage(canvas, 0, 0);
 }
 
-function updatePreview(text) {
+function updatePreview() {
   if (!renderer || mode !== 'editor') return;
   let parsed;
   try {
-    parsed = parseFormula(text);
+    parsed = parseCustom(editorTexts());
   } catch {
     preview.box.classList.add('stale');
     return;
   }
-  const key = `${parsed.glsl}|${state.palette}`;
+  const parts = shaderParts(parsed);
+  const key = `${parts.iter}|${parts.seedZ}|${parts.seedC}|${state.palette}`;
   if (key !== previewKey) {
     try {
-      drawPreview(parsed.glsl);
+      drawPreview(parts, customHome(parsed));
     } catch {
       preview.box.classList.add('stale');
       return;
     }
     previewKey = key;
-    preview.note.textContent = `z ← ${parsed.text}`;
+    preview.note.textContent = customLabel(parsed);
   }
   preview.box.classList.remove('stale');
 }
 
 function schedulePreview() {
   clearTimeout(previewTimer);
-  previewTimer = setTimeout(() => updatePreview(editor.input.value), PREVIEW_DELAY);
+  previewTimer = setTimeout(updatePreview, PREVIEW_DELAY);
 }
 
 function leaveEditor() {
-  renderer?.setCustom(committedExpr);
+  renderer?.setCustom(committed?.parts ?? null);
   previewKey = '';
   showMenu();
 }
@@ -514,16 +605,21 @@ function showEditor() {
   viewer.hidden = true;
   menu.hidden = true;
   editor.page.hidden = false;
-  editor.input.value = state.formula || DEFAULT_FORMULA;
+  clearTimeout(hashTimer);
+  history.replaceState(null, '', location.pathname + location.search);
+  for (const f of FIELDS) {
+    editor.input[f.key].value = state[f.key] || DEFAULTS[f.key];
+    paintField(f);
+  }
   editor.error.textContent = '';
-  updatePreview(editor.input.value);
-  editor.input.focus();
-  editor.input.select();
+  updatePreview();
+  editor.input.formula.focus();
+  editor.input.formula.select();
 }
 
 editor.form.addEventListener('submit', (e) => {
   e.preventDefault();
-  const err = applyFormula(editor.input.value);
+  const err = applyCustom(editorTexts());
   if (err) {
     editor.error.textContent = err;
     return;
@@ -531,10 +627,16 @@ editor.form.addEventListener('submit', (e) => {
   showViewer('custom', homeView('custom'));
 });
 
-editor.input.addEventListener('input', () => {
-  editor.error.textContent = '';
-  schedulePreview();
-});
+for (const f of FIELDS) {
+  const input = editor.input[f.key];
+  input.addEventListener('input', () => {
+    editor.error.textContent = '';
+    paintField(f);
+    schedulePreview();
+  });
+  input.addEventListener('scroll', () => { editor.ink[f.key].scrollLeft = input.scrollLeft; });
+}
+
 $('#editor-cancel').addEventListener('click', leaveEditor);
 $('#create').addEventListener('click', showEditor);
 
@@ -623,7 +725,7 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (k === ' ') { e.preventDefault(); savePng(); }
-  if (k === 'escape') (goto.form.hidden ? showMenu : closeGoto)();
+  if (k === 'escape') (goto.form.hidden ? leaveViewer : closeGoto)();
   if (k === '[') changeDetail(-1);
   if (k === ']') changeDetail(1);
   if (k === ',') stepPalette(-1);
@@ -712,7 +814,7 @@ canvas.addEventListener('pointercancel', endPointer);
 $('#detail-down').addEventListener('click', () => changeDetail(-1));
 $('#detail-up').addEventListener('click', () => changeDetail(1));
 $('#save').addEventListener('click', savePng);
-$('#back').addEventListener('click', showMenu);
+backBtn.addEventListener('click', leaveViewer);
 window.addEventListener('resize', () => { if (mode === 'view') requestRender(); });
 
 // ---------- Colourways ----------
@@ -805,6 +907,8 @@ function showViewer(set, view) {
   viewer.hidden = false;
   closeGoto();
   $('#set-name').textContent = SETS[set].name;
+  backBtn.textContent = set === 'custom' ? '← Formula' : '← Menu';
+  backBtn.title = set === 'custom' ? 'Back to the formula (Esc)' : 'Back to menu (Esc)';
   showJuliaUi();
 
   hud.bookmarks.replaceChildren(
@@ -824,6 +928,11 @@ function showViewer(set, view) {
   );
 
   requestRender();
+}
+
+function leaveViewer() {
+  if (state.set === 'custom') showEditor();
+  else showMenu();
 }
 
 function showMenu() {
@@ -875,12 +984,14 @@ for (const card of document.querySelectorAll('.card')) {
 
 // ---------- Boot ----------
 
-window.__fx = { state, showViewer, showMenu, showEditor, renderCards, render, renderer, iterationsFor, updatePreview, Camera, parseLocation, parseZoom, goTo, applyJulia, applyFormula, setPalette };
+window.__fx = { state, showViewer, showMenu, showEditor, renderCards, render, renderer, iterationsFor, updatePreview, Camera, parseLocation, parseZoom, goTo, applyJulia, applyCustom, setPalette };
 
 setPalette(initialPalette(), { render: false });
 
-const linkedFormula = new URLSearchParams(location.search).get('f');
-if (linkedFormula) applyFormula(linkedFormula);
+const params = new URLSearchParams(location.search);
+if (params.get('f')) {
+  applyCustom(Object.fromEntries(FIELDS.map((f) => [f.key, params.get(f.param) ?? DEFAULTS[f.key]])));
+}
 
 if (readHash()) {
   showViewer(state.set);
