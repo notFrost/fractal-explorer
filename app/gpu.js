@@ -78,10 +78,11 @@ export class Renderer {
   }
 
   setCustom(expr) {
-    if (expr === this.customExpr && this.programs.custom) return;
-    const prog = this.link(COMMON + customBody(expr));
+    if (expr === this.customExpr) return;
+    const prog = expr && this.link(COMMON + customBody(expr));
     if (this.programs.custom) this.gl.deleteProgram(this.programs.custom.p);
-    this.programs.custom = prog;
+    if (prog) this.programs.custom = prog;
+    else delete this.programs.custom;
     this.customExpr = expr;
   }
 

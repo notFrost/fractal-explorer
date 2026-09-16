@@ -30,8 +30,22 @@
 .editor {
   display: grid;
   align-content: start;
-  gap: 0.6rem;
+  gap: 2rem;
   width: 100%;
+}
+
+@media (min-width: 900px) {
+  .editor {
+    grid-template-columns: minmax(0, 60ch) minmax(0, 30rem);
+    align-items: start;
+  }
+}
+
+.editor-form {
+  display: grid;
+  align-content: start;
+  gap: 0.6rem;
+  min-width: 0;
   max-width: 60ch;
 }
 
@@ -67,4 +81,26 @@
   padding-top: 0.6rem;
   border-top: 1px solid var(--line);
   color: var(--dim);
+}
+
+.editor-preview {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 30rem;
+  transition: opacity var(--motion);
+}
+
+.editor-preview.stale { opacity: 0.3; }
+
+.preview-note {
+  margin: 0;
+  min-height: 1.4em;
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-preview { transition: none; }
 }

@@ -6,7 +6,7 @@ One source of truth for how this toy looks. Three sheets, loaded in order:
 | --- | --- | --- |
 | `tokens.css` | Colours, fonts, blur, motion timing, as custom properties | The look changes |
 | `base.css` | Reset, document type, button reset, focus ring | Never, mostly |
-| `chrome.css` | Page shell (`.page`, `.page-head`, `.title`, `.lede`, `.page-foot`), controls (`.panel`, `.btn`, `.chip`, `.input`), the wobble keyframes | A new page or control should look like the rest |
+| `chrome.css` | Page shell (`.page`, `.page-head`, `.title`, `.lede`, `.page-foot`), controls (`.panel`, `.btn`, `.chip`, `.input`, `.thumb`), the wobble keyframes | A new page or control should look like the rest |
 
 Rules of the road:
 
