@@ -107,6 +107,25 @@
 .tok-nest-4 { color: var(--syn-nest-4); }
 .tok-nest-5 { color: var(--syn-nest-5); }
 
+/* The two starting values share the formula's two layers, a size down. */
+.editor-seeds {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.6rem 1rem;
+  margin-top: 0.4rem;
+}
+
+.editor-seed {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.editor-seed .editor-input,
+.editor-seed .editor-ink {
+  font-size: 1.05rem;
+}
+
 .editor-help {
   display: flex;
   flex-wrap: wrap;

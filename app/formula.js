@@ -1,5 +1,6 @@
 // Turns a typed iteration formula into a GLSL expression for the next z, and
-// into the coloured token stream the editor paints behind the input.
+// into the coloured token stream the editor paints behind the input. The same
+// grammar reads the starting values of z and c, which speak x and y instead.
 
 const SUPER = {
   '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
@@ -28,7 +29,19 @@ const FUNCS = {
   sinh: 'csinh', cosh: 'ccosh', tanh: 'ctanh',
 };
 
-const VARS = { z: 'z', c: 'c' };
+const names = (vars, strangers, message) => ({ vars, strangers: new Set(strangers), message });
+
+const ITERATION = names(
+  { z: 'z', c: 'c' },
+  ['x', 'y'],
+  'x and y are the point being checked, so they belong to the starting values of z and c',
+);
+
+const SEED = names(
+  { x: 'vec2(p.x, 0.0)', y: 'vec2(p.y, 0.0)' },
+  ['z', 'c'],
+  'a starting value is built from x and y, not from z or c',
+);
 
 const MAX_LENGTH = 240;
 const MAX_NODES = 400;
@@ -67,7 +80,6 @@ function normalize(src) {
   s = s.replace(SUPER_RUN, (run) => `^(${[...run].map((ch) => SUPER[ch]).join('')})`);
   s = s.replace(SUB_RUN, (run) => `_(${[...run].map((ch) => SUB[ch]).join('')})`);
   s = s.replace(new RegExp(INDEX, 'g'), '');
-  if (s.includes('_')) fail('only zₙ and zₙ₊₁ are understood, not earlier terms like zₙ₋₁');
   return s;
 }
 
@@ -98,7 +110,19 @@ function lex(s) {
   return out;
 }
 
-function compile(tokens) {
+// Letters written side by side multiply, so x+yi reads as x + y·i. Only a run
+// where every letter is known splits; anything else stays one name.
+function letterValues(name, mode) {
+  const parts = [...name].map((ch) => (
+    mode.vars[ch] ? complex(mode.vars[ch]) : CONSTS[ch] ? CONSTS[ch]() : null
+  ));
+  return parts.every(Boolean) ? parts : null;
+}
+
+const splitsIntoLetters = (name, mode) =>
+  name.length > 1 && [...name].every((ch) => mode.vars[ch] || CONSTS[ch] || mode.strangers.has(ch));
+
+function compile(tokens, mode) {
   let i = 0;
   let nodes = 0;
   let openBars = 0;
@@ -207,8 +231,12 @@ function compile(tokens) {
         if (!eat(')')) fail(`the bracket after ${name} is not closed`);
         return call(name, arg);
       }
-      if (VARS[name]) return complex(VARS[name]);
+      if (mode.vars[name]) return complex(mode.vars[name]);
       if (CONSTS[name]) return CONSTS[name]();
+      if (mode.strangers.has(name)) fail(mode.message);
+      const letters = name.length > 1 ? letterValues(name, mode) : null;
+      if (letters) return letters.reduce((a, b) => product(a, b));
+      if ([...name].some((ch) => mode.strangers.has(ch))) fail(mode.message);
       fail(`“${name}” is not a name this editor knows`);
     }
     if (t.t === 'op' && t.v === '(') {
@@ -234,11 +262,15 @@ function compile(tokens) {
   return out;
 }
 
-export function parseFormula(src) {
+function parse(src, mode) {
   if (String(src).trim().length > MAX_LENGTH) fail('that formula is too long');
   const rhs = rightHandSide(normalize(src));
-  return { glsl: compile(lex(rhs)).code, text: rhs };
+  if (rhs.includes('_')) fail('only zₙ and zₙ₊₁ are understood, not earlier terms like zₙ₋₁');
+  return { glsl: compile(lex(rhs), mode).code, text: rhs };
 }
+
+export const parseFormula = (src) => parse(src, ITERATION);
+export const parseSeed = (src) => parse(src, SEED);
 
 // ---------- The same line, coloured ----------
 
@@ -257,18 +289,20 @@ const PAINT = new RegExp([
   /([\s\S])/,
 ].map((part) => part.source).join('|'), 'iy');
 
-function nameKind(name) {
+function nameKind(name, mode) {
   if (FUNCS[name]) return 'func';
-  if (VARS[name]) return 'var';
+  if (mode.vars[name]) return 'var';
   if (CONSTS[name]) return 'const';
+  if (mode.strangers.has(name)) return 'bad';
   return 'unknown';
 }
 
-const superKind = (plain) => (/\d/.test(plain) ? 'num' : /[-+]/.test(plain) ? 'op' : nameKind(plain));
+const superKind = (plain, mode) =>
+  (/\d/.test(plain) ? 'num' : /[-+]/.test(plain) ? 'op' : nameKind(plain, mode));
 
 const inBar = (open) => open.length > 0 && BAR_CHARS.includes(open[open.length - 1].text);
 
-export function formulaTokens(src) {
+function paint(src, mode) {
   const s = String(src);
   const out = [];
   const open = [];
@@ -291,11 +325,13 @@ export function formulaTokens(src) {
     else if (m[2]) { add(text, 'num'); wantsValue = false; }
     else if (m[3]) add(text, 'index');
     else if (m[4]) {
-      const kind = nameKind(text.toLowerCase());
-      add(text, kind);
+      const kind = nameKind(text.toLowerCase(), mode);
+      if (kind === 'unknown' && splitsIntoLetters(text.toLowerCase(), mode)) {
+        for (const ch of text) add(ch, nameKind(ch.toLowerCase(), mode));
+      } else add(text, kind);
       wantsValue = kind === 'func';
     } else if (m[5]) {
-      for (const ch of text) add(ch, superKind(SUPER[ch]));
+      for (const ch of text) add(ch, superKind(SUPER[ch], mode));
       wantsValue = false;
     } else if (m[6]) {
       const plain = [...text].map((ch) => SUB[ch]).join('');
@@ -320,3 +356,6 @@ export function formulaTokens(src) {
   for (const tok of open) { tok.kind = 'bad'; delete tok.depth; }
   return out;
 }
+
+export const formulaTokens = (src) => paint(src, ITERATION);
+export const seedTokens = (src) => paint(src, SEED);

@@ -37,12 +37,13 @@ vec2 ccosh(vec2 z) { return vec2(cosh(z.x) * cos(z.y), sinh(z.x) * sin(z.y)); }
 vec2 ctanh(vec2 z) { return cdiv(csinh(z), ccosh(z)); }
 `;
 
-export function customBody(expr) {
+export function customBody({ iter, seedZ, seedC }) {
   return CUSTOM_LIB + `
-float escape(vec2 c) {
-  vec2 z = vec2(0.0);
+float escape(vec2 p) {
+  vec2 c = ${seedC};
+  vec2 z = ${seedZ};
   for (int n = 0; n < u_maxIter; n++) {
-    z = ${expr};
+    z = ${iter};
     float zz = dot(z, z);
     if (!(zz < 1e4)) {
       float t = smoothT(n + 1, log(zz));
@@ -53,7 +54,7 @@ float escape(vec2 c) {
 }
 
 void main() {
-  vec2 c = u_center + (gl_FragCoord.xy - 0.5 * u_res) * u_px;
-  outColor = vec4(palette(escape(c)), 1.0);
+  vec2 p = u_center + (gl_FragCoord.xy - 0.5 * u_res) * u_px;
+  outColor = vec4(palette(escape(p)), 1.0);
 }`;
 }

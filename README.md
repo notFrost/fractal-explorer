@@ -37,7 +37,7 @@ root, so the portal reads the hash on load and forwards anything shaped like
 | Zoom | E in, Q out | wheel, pinch |
 | Iterations (×1 ×2 ×4 ×8) | `[` and `]` | the two round buttons |
 | Save PNG at twice screen size | Space | the camera button |
-| Back to menu | Esc | Menu button |
+| Back to the menu, or to the formula for a custom set | Esc | Menu button |
 | Go to a location | G, or paste | click the coordinate or zoom in the HUD |
 | Colourway | `,` and `.` | the chips in the HUD |
 | Fold the HUD away | H | the `hud` toggle under the panel |
@@ -176,22 +176,35 @@ had to be recomputed.
 **Create Fractal**, at the bottom of the menu, takes one line — `Z_(n+1) =
 Z_(n)^2 + C`, or `z ← z² + c`, or just `z^2 + c` — and renders it. The text is
 parsed into an expression and compiled into a fragment shader, so a typed
-formula draws on the same path as the built-in sets.
+formula draws on the same path as the built-in sets. The Menu button in the
+viewer comes back here rather than to the main menu.
 
-Beside the field is a live preview of the view **Render** will open on, at
+Under the line are the two values the pixel starts the orbit at, `z₀` and `c`,
+each written `real + imaginary i`. They take `x` and `y`, the real and
+imaginary parts of the point being checked, where the line itself takes `z`
+and `c`; for an `x` in the line, or a `z` in a starting value, the editor
+names the field it belongs to instead of calling it unknown. The usual pair,
+`z₀ = 0` and `c = x+yi`, is the Mandelbrot arrangement. Fix `c` at a constant
+and start `z` at the pixel instead, `z₀ = x+yi`, and the formula draws the
+Julia set of that constant; the view then opens on the origin rather than on
+−0.7, since a Julia set is centred there.
+
+Beside the fields is a live preview of the view **Render** will open on, at
 most 640 pixels across. It redraws a quarter second after the last keystroke,
 on the same GL canvas the menu cards use, and prints underneath how the parser
-read the line, so a typed `zᶻ + c` shows as `z ← z^(z) + c`. Text the parser
-cannot read leaves the last picture up, dimmed, rather than blanking
-mid-keystroke. A formula previewed and then cancelled is dropped, and the
-shader goes back to the last one rendered.
+read the line, so a typed `zᶻ + c` shows as `z ← z^(z) + c`, with either
+starting value that is not the usual one beside it. Text the parser cannot
+read leaves the last picture up, dimmed, rather than blanking mid-keystroke. A
+formula previewed and then cancelled is dropped, and the shader goes back to
+the last one rendered.
 
 What it reads: `z` and `c`, decimal numbers, `i`, `pi` and `e`; `+ - * / ^`
-with brackets, two values side by side for multiplication; `abs re im conj
-exp log sqrt sin cos tan sinh cosh tanh`, each of one argument; and bars for
-absolute value, so Burning Ship is `(|re(z)| + i|im(z)|)² + conj(c)`. The
-notation the cards use works as typed — superscripts, subscripts, `←`, `×`,
-`÷`, `−` — so `zᶻ + c` is Pacman. A whole-number exponent squares and
+with brackets, two values side by side for multiplication, letters written
+together as well, so `x+yi` reads as `x + y·i`; `abs re im conj exp log sqrt
+sin cos tan sinh cosh tanh`, each of one argument; and bars for absolute
+value, so Burning Ship is `(|re(z)| + i|im(z)|)² + conj(c)`. The notation the
+cards use works as typed — superscripts, subscripts, `←`, `×`, `÷`, `−` — so
+`zᶻ + c` is Pacman. A whole-number exponent squares and
 multiplies rather than going through `exp` and `log`, which is faster and,
 unlike the log, defined at `z = 0`.
 
@@ -200,23 +213,25 @@ value is due and closes where one has just ended. `||z| + |c||` and `2|z|`
 come out as written. A bracket starts the count over, so a bar inside brackets
 pairs inside them.
 
-The editor colours the line as you type. Brackets and bars take a colour from
+The editor colours each line as you type. Brackets and bars take a colour from
 their nesting depth and the six colours cycle, so a pair matches and the pairs
-either side of it do not. `z` and `c`, numbers, `i pi e`, the function names
-and the operators each have a colour of their own. The index on `zₙ₊₁` is dim,
-since the parser drops it, and a bracket or bar left open turns red. A layer
-behind the field carries the colours; the field itself keeps the caret, the
-selection and the scrolling. The help line under the field prints each group
-in its colour, so it doubles as the key.
+either side of it do not. `z` and `c`, or `x` and `y` in the starting values,
+numbers, `i pi e`, the function names and the operators each have a colour of
+their own. The index on `zₙ₊₁` is dim, since the parser drops it, and a
+bracket or bar left open turns red, as does a name that belongs to a different
+field, such as `z` in a starting value. A layer behind each field carries the
+colours; the field itself keeps the caret, the selection and the scrolling.
+The help line under a field prints each group in its colour, so it doubles as
+the key.
 
-Everything else is fixed in this first version: `z` starts at 0, `c` is the
-pixel, the orbit escapes at `|z| > 100`. There is no perturbed form of an
-arbitrary recurrence, so the custom set iterates directly in float32 and stops
-at 10^6 zoom, where the others hand over to a reference orbit. A formula can
-also overshoot the bailout or reach NaN, neither of which the smooth count
-survives, so a count it cannot read falls back to the step number. The text
-rides in the URL as `?f=` before the hash, so a custom view shares like any
-other.
+Everything else is fixed in this first version: the orbit escapes at
+`|z| > 100`. There is no perturbed form of an arbitrary recurrence, so the
+custom set iterates directly in float32 and stops at 10^6 zoom, where the
+others hand over to a reference orbit. A formula can also overshoot the
+bailout or reach NaN, neither of which the smooth count survives, so a count
+it cannot read falls back to the step number. The text rides in the URL as
+`?f=` before the hash, with `?z=` and `?c=` for the starting values when they
+are not the usual pair, so a custom view shares like any other.
 
 ## Ported from the original
 

@@ -33,6 +33,8 @@ export class Renderer {
     if (!this.gl) throw new Error('WebGL2 is not available in this browser.');
     this.lost = false;
     this.palette = 0;
+    this.custom = null;
+    this.customKey = null;
     canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; });
     canvas.addEventListener('webglcontextrestored', () => { this.lost = false; this.setup(); });
     this.setup();
@@ -46,10 +48,11 @@ export class Renderer {
     for (const [name, body] of Object.entries(SOURCES)) {
       this.programs[name] = this.link(COMMON + body);
     }
-    if (this.customExpr) {
-      const expr = this.customExpr;
-      this.customExpr = null;
-      this.setCustom(expr);
+    if (this.custom) {
+      const parts = this.custom;
+      this.custom = null;
+      this.customKey = null;
+      this.setCustom(parts);
     }
     this.refRows = Math.ceil((2 * MAX_ITER + 4) / REF_W);
     this.refBuf = new Float32Array(REF_W * this.refRows * 4);
@@ -77,13 +80,15 @@ export class Renderer {
     return { p, u: Object.fromEntries(UNIFORMS.map((n) => [n, gl.getUniformLocation(p, n)])) };
   }
 
-  setCustom(expr) {
-    if (expr === this.customExpr) return;
-    const prog = expr && this.link(COMMON + customBody(expr));
+  setCustom(parts) {
+    const key = parts ? `${parts.iter}|${parts.seedZ}|${parts.seedC}` : null;
+    if (key === this.customKey) return;
+    const prog = parts && this.link(COMMON + customBody(parts));
     if (this.programs.custom) this.gl.deleteProgram(this.programs.custom.p);
     if (prog) this.programs.custom = prog;
     else delete this.programs.custom;
-    this.customExpr = expr;
+    this.custom = parts || null;
+    this.customKey = key;
   }
 
   ensureReference(view, iters, screenPx) {
