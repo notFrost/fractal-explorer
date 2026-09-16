@@ -187,12 +187,27 @@ mid-keystroke. A formula previewed and then cancelled is dropped, and the
 shader goes back to the last one rendered.
 
 What it reads: `z` and `c`, decimal numbers, `i`, `pi` and `e`; `+ - * / ^`
-with brackets, two values side by side for multiplication; and `abs re im
-conj exp log sqrt sin cos tan sinh cosh tanh`, each of one argument. The
+with brackets, two values side by side for multiplication; `abs re im conj
+exp log sqrt sin cos tan sinh cosh tanh`, each of one argument; and bars for
+absolute value, so Burning Ship is `(|re(z)| + i|im(z)|)² + conj(c)`. The
 notation the cards use works as typed — superscripts, subscripts, `←`, `×`,
 `÷`, `−` — so `zᶻ + c` is Pacman. A whole-number exponent squares and
 multiplies rather than going through `exp` and `log`, which is faster and,
 unlike the log, defined at `z = 0`.
+
+The same character has to open and close the pair, so a bar opens where a
+value is due and closes where one has just ended. `||z| + |c||` and `2|z|`
+come out as written. A bracket starts the count over, so a bar inside brackets
+pairs inside them.
+
+The editor colours the line as you type. Brackets and bars take a colour from
+their nesting depth and the six colours cycle, so a pair matches and the pairs
+either side of it do not. `z` and `c`, numbers, `i pi e`, the function names
+and the operators each have a colour of their own. The index on `zₙ₊₁` is dim,
+since the parser drops it, and a bracket or bar left open turns red. A layer
+behind the field carries the colours; the field itself keeps the caret, the
+selection and the scrolling. The help line under the field prints each group
+in its colour, so it doubles as the key.
 
 Everything else is fixed in this first version: `z` starts at 0, `c` is the
 pixel, the orbit escapes at `|z| > 100`. There is no perturbed form of an

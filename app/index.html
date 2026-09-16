@@ -98,12 +98,19 @@
     <div class="editor">
       <form id="editor-form" class="editor-form" autocomplete="off">
         <label class="editor-label" for="formula">Formula</label>
-        <input id="formula" class="input editor-input" type="text" spellcheck="false" autocapitalize="off"
-               placeholder="Z_(n+1) = Z_(n)^2 + C" aria-describedby="formula-help" />
+        <div class="editor-field">
+          <div id="formula-ink" class="editor-ink" aria-hidden="true"></div>
+          <input id="formula" class="input editor-input" type="text" spellcheck="false" autocapitalize="off"
+                 placeholder="Z_(n+1) = Z_(n)^2 + C" aria-describedby="formula-help" />
+        </div>
         <p id="formula-help" class="editor-help">
-          <span>z and c, numbers, i, pi, e</span>
-          <span>+ − × ÷ ^ and brackets</span>
-          <span>abs re im conj exp log sqrt sin cos tan sinh cosh tanh</span>
+          <span class="tok-var">z c</span>
+          <span class="tok-num">numbers</span>
+          <span class="tok-const">i pi e</span>
+          <span class="tok-op">+ − × ÷ ^</span>
+          <span class="tok-nest-0">( ) and | | nest in colour</span>
+          <span class="tok-func">abs re im conj exp log sqrt sin cos tan sinh cosh tanh</span>
+          <span>|z| is abs z</span>
         </p>
         <div class="editor-actions">
           <button type="submit" class="btn btn-accent">Render</button>

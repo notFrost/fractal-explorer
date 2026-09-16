@@ -55,10 +55,57 @@
   letter-spacing: 0.08em;
 }
 
-.editor-input {
-  font-size: 1.25rem;
-  padding: 0.6rem 0.7rem;
+/* The coloured line sits under a transparent input, which keeps the caret,
+   the selection and the scroll. Both boxes take the same metrics so the two
+   layers land character on character. */
+.editor-field {
+  position: relative;
 }
+
+.editor-input,
+.editor-ink {
+  font-family: var(--mono);
+  font-size: 1.25rem;
+  line-height: 1.4;
+  padding: 0.6rem 0.7rem;
+  font-variant-ligatures: none;
+}
+
+.editor-input {
+  position: relative;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--ink);
+}
+
+.editor-input::selection {
+  background: var(--select);
+  color: transparent;
+}
+
+.editor-ink {
+  position: absolute;
+  inset: 0;
+  border: 1px solid transparent;
+  overflow: hidden;
+  white-space: pre;
+  pointer-events: none;
+}
+
+.tok-var { color: var(--syn-var); }
+.tok-num { color: var(--syn-num); }
+.tok-const { color: var(--syn-const); }
+.tok-func { color: var(--syn-func); }
+.tok-op { color: var(--syn-op); }
+.tok-assign { color: var(--dim); }
+.tok-index { color: var(--dim); }
+.tok-bad { color: var(--syn-bad); }
+.tok-nest-0 { color: var(--syn-nest-0); }
+.tok-nest-1 { color: var(--syn-nest-1); }
+.tok-nest-2 { color: var(--syn-nest-2); }
+.tok-nest-3 { color: var(--syn-nest-3); }
+.tok-nest-4 { color: var(--syn-nest-4); }
+.tok-nest-5 { color: var(--syn-nest-5); }
 
 .editor-help {
   display: flex;

@@ -2,7 +2,7 @@ import { SETS, MIN_LOG_ZOOM, iterationsFor } from './fractals.js';
 import { Camera } from './precision.js';
 import { Renderer } from './gpu.js';
 import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palettes.js';
-import { parseFormula } from './formula.js';
+import { parseFormula, formulaTokens } from './formula.js';
 
 // ---------- State ----------
 
@@ -55,6 +55,7 @@ const editor = {
   page: $('#editor'),
   form: $('#editor-form'),
   input: $('#formula'),
+  ink: $('#formula-ink'),
   error: $('#formula-error'),
 };
 const preview = {
@@ -427,8 +428,32 @@ juliaUi.presets.replaceChildren(
 const DEFAULT_FORMULA = 'Z_(n+1) = Z_(n)^2 + C';
 const PREVIEW_MAX_PX = 640;
 const PREVIEW_DELAY = 250;
+const NEST_COLOURS = 6;
 
 let committedExpr = null;
+
+const TOKEN_CLASS = {
+  var: 'tok-var',
+  num: 'tok-num',
+  const: 'tok-const',
+  func: 'tok-func',
+  op: 'tok-op',
+  assign: 'tok-assign',
+  index: 'tok-index',
+  bad: 'tok-bad',
+};
+
+function paintFormula(text) {
+  editor.ink.replaceChildren(...formulaTokens(text).map((tok) => {
+    const span = document.createElement('span');
+    span.className = tok.depth === undefined
+      ? TOKEN_CLASS[tok.kind] ?? ''
+      : `tok-nest-${tok.depth % NEST_COLOURS}`;
+    span.textContent = tok.text;
+    return span;
+  }));
+  editor.ink.scrollLeft = editor.input.scrollLeft;
+}
 
 function applyFormula(text) {
   if (!renderer) return 'this browser has no WebGL2';
@@ -516,6 +541,7 @@ function showEditor() {
   editor.page.hidden = false;
   editor.input.value = state.formula || DEFAULT_FORMULA;
   editor.error.textContent = '';
+  paintFormula(editor.input.value);
   updatePreview(editor.input.value);
   editor.input.focus();
   editor.input.select();
@@ -533,7 +559,11 @@ editor.form.addEventListener('submit', (e) => {
 
 editor.input.addEventListener('input', () => {
   editor.error.textContent = '';
+  paintFormula(editor.input.value);
   schedulePreview();
+});
+editor.input.addEventListener('scroll', () => {
+  editor.ink.scrollLeft = editor.input.scrollLeft;
 });
 $('#editor-cancel').addEventListener('click', leaveEditor);
 $('#create').addEventListener('click', showEditor);

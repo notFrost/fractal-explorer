@@ -1,4 +1,5 @@
-// Turns a typed iteration formula into a GLSL expression for the next z.
+// Turns a typed iteration formula into a GLSL expression for the next z, and
+// into the coloured token stream the editor paints behind the input.
 
 const SUPER = {
   '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
@@ -10,8 +11,13 @@ const SUB = {
   '₊': '+', '₋': '-', 'ₙ': 'n',
 };
 
-const SUPER_RUN = new RegExp(`[${Object.keys(SUPER).join('')}]+`, 'g');
-const SUB_RUN = new RegExp(`[${Object.keys(SUB).join('')}]+`, 'g');
+const SUPER_CHARS = Object.keys(SUPER).join('');
+const SUB_CHARS = Object.keys(SUB).join('');
+const BAR_CHARS = '|∣｜│❘';
+
+const SUPER_RUN = new RegExp(`[${SUPER_CHARS}]+`, 'g');
+const SUB_RUN = new RegExp(`[${SUB_CHARS}]+`, 'g');
+const BAR_ANY = new RegExp(`[${BAR_CHARS}]`, 'g');
 
 const BRACKETS = { '{': '(', '}': ')', '[': '(', ']': ')' };
 
@@ -49,16 +55,18 @@ const CONSTS = {
   e: () => real(Math.E),
 };
 
+const INDEX_SUBS = ['n', 'n+1'];
+const INDEX = /(_\s*\(\s*n\s*\+\s*1\s*\)|_\s*\(\s*n\s*\)|_\s*n(?![a-z0-9]))/;
+
 function normalize(src) {
   let s = String(src).trim().toLowerCase();
   s = s.replace(/[−–—‒]/g, '-').replace(/[·×∙]/g, '*').replace(/[÷∕]/g, '/');
+  s = s.replace(BAR_ANY, '|');
   s = s.replace(/[{}[\]]/g, (ch) => BRACKETS[ch]);
   s = s.replace(/:=|[←→↦⟵⟶]/g, '=');
   s = s.replace(SUPER_RUN, (run) => `^(${[...run].map((ch) => SUPER[ch]).join('')})`);
   s = s.replace(SUB_RUN, (run) => `_(${[...run].map((ch) => SUB[ch]).join('')})`);
-  s = s.replace(/_\s*\(\s*n\s*\+\s*1\s*\)/g, '');
-  s = s.replace(/_\s*\(\s*n\s*\)/g, '');
-  s = s.replace(/_\s*n(?![a-z0-9])/g, '');
+  s = s.replace(new RegExp(INDEX, 'g'), '');
   if (s.includes('_')) fail('only zₙ and zₙ₊₁ are understood, not earlier terms like zₙ₋₁');
   return s;
 }
@@ -72,7 +80,7 @@ function rightHandSide(s) {
   return rhs;
 }
 
-const LEX = /(\d+(?:\.\d*)?(?:e[-+]?\d+)?|\.\d+(?:e[-+]?\d+)?)|([a-z]+)|([-+*/^(),])|(\s+)|(.)/gy;
+const LEX = /(\d+(?:\.\d*)?(?:e[-+]?\d+)?|\.\d+(?:e[-+]?\d+)?)|([a-z]+)|([-+*/^(),|])|(\s+)|(.)/gy;
 
 function lex(s) {
   const out = [];
@@ -90,11 +98,10 @@ function lex(s) {
   return out;
 }
 
-const startsValue = (t) => !!t && (t.t === 'num' || t.t === 'name' || (t.t === 'op' && t.v === '('));
-
 function compile(tokens) {
   let i = 0;
   let nodes = 0;
+  let openBars = 0;
 
   const peek = () => tokens[i];
   const grow = () => { if (++nodes > MAX_NODES) fail('that formula has too many terms'); };
@@ -103,6 +110,23 @@ function compile(tokens) {
     if (t && t.t === 'op' && t.v === v) { i++; return true; }
     return false;
   };
+
+  const startsValue = (t) =>
+    !!t && (t.t === 'num' || t.t === 'name'
+      || (t.t === 'op' && (t.v === '(' || (t.v === '|' && openBars === 0))));
+
+  function insideBrackets(parse) {
+    const outer = openBars;
+    openBars = 0;
+    const v = parse();
+    openBars = outer;
+    return v;
+  }
+
+  function call(name, arg) {
+    grow();
+    return complex(`${FUNCS[name]}(${arg.code})`);
+  }
 
   function sum(a, b, op) {
     grow();
@@ -178,11 +202,10 @@ function compile(tokens) {
       const name = t.v;
       if (FUNCS[name]) {
         if (!eat('(')) fail(`${name} needs a bracket, as in ${name}(z)`);
-        const arg = expr(depth + 1);
+        const arg = insideBrackets(() => expr(depth + 1));
         if (eat(',')) fail(`${name} takes one value`);
         if (!eat(')')) fail(`the bracket after ${name} is not closed`);
-        grow();
-        return complex(`${FUNCS[name]}(${arg.code})`);
+        return call(name, arg);
       }
       if (VARS[name]) return complex(VARS[name]);
       if (CONSTS[name]) return CONSTS[name]();
@@ -190,9 +213,18 @@ function compile(tokens) {
     }
     if (t.t === 'op' && t.v === '(') {
       i++;
-      const e = expr(depth + 1);
+      const e = insideBrackets(() => expr(depth + 1));
       if (!eat(')')) fail('a bracket is not closed');
       return e;
+    }
+    if (t.t === 'op' && t.v === '|') {
+      i++;
+      if (!peek()) fail('a bar is not closed');
+      openBars++;
+      const inner = expr(depth + 1);
+      if (!eat('|')) fail('a bar is not closed');
+      openBars--;
+      return call('abs', inner);
     }
     fail(`“${t.v}” is out of place`);
   }
@@ -206,4 +238,85 @@ export function parseFormula(src) {
   if (String(src).trim().length > MAX_LENGTH) fail('that formula is too long');
   const rhs = rightHandSide(normalize(src));
   return { glsl: compile(lex(rhs)).code, text: rhs };
+}
+
+// ---------- The same line, coloured ----------
+
+const PAINT = new RegExp([
+  /(\s+)/,
+  /(\d+(?:\.\d*)?(?:e[-+]?\d+)?|\.\d+(?:e[-+]?\d+)?)/,
+  INDEX,
+  /([a-z]+)/,
+  new RegExp(`([${SUPER_CHARS}]+)`),
+  new RegExp(`([${SUB_CHARS}]+)`),
+  /([({\[])/,
+  /([)}\]])/,
+  new RegExp(`([${BAR_CHARS}])`),
+  /(:=|[=←→↦⟵⟶])/,
+  /([-+*/^,−–—‒·×∙÷∕])/,
+  /([\s\S])/,
+].map((part) => part.source).join('|'), 'iy');
+
+function nameKind(name) {
+  if (FUNCS[name]) return 'func';
+  if (VARS[name]) return 'var';
+  if (CONSTS[name]) return 'const';
+  return 'unknown';
+}
+
+const superKind = (plain) => (/\d/.test(plain) ? 'num' : /[-+]/.test(plain) ? 'op' : nameKind(plain));
+
+const inBar = (open) => open.length > 0 && BAR_CHARS.includes(open[open.length - 1].text);
+
+export function formulaTokens(src) {
+  const s = String(src);
+  const out = [];
+  const open = [];
+  let wantsValue = true;
+
+  const add = (text, kind, depth) => {
+    const tok = { text, kind };
+    if (depth !== undefined) tok.depth = depth;
+    out.push(tok);
+    return tok;
+  };
+
+  PAINT.lastIndex = 0;
+  while (PAINT.lastIndex < s.length) {
+    const at = PAINT.lastIndex;
+    const m = PAINT.exec(s);
+    if (!m) { add(s.slice(at), 'bad'); break; }
+    const text = m[0];
+    if (m[1]) add(text, 'plain');
+    else if (m[2]) { add(text, 'num'); wantsValue = false; }
+    else if (m[3]) add(text, 'index');
+    else if (m[4]) {
+      const kind = nameKind(text.toLowerCase());
+      add(text, kind);
+      wantsValue = kind === 'func';
+    } else if (m[5]) {
+      for (const ch of text) add(ch, superKind(SUPER[ch]));
+      wantsValue = false;
+    } else if (m[6]) {
+      const plain = [...text].map((ch) => SUB[ch]).join('');
+      add(text, INDEX_SUBS.includes(plain) ? 'index' : 'bad');
+    } else if (m[7]) {
+      open.push(add(text, 'nest', open.length));
+      wantsValue = true;
+    } else if (m[8]) {
+      if (open.length && !inBar(open)) { open.pop(); add(text, 'nest', open.length); }
+      else add(text, 'bad');
+      wantsValue = false;
+    } else if (m[9]) {
+      const closes = !wantsValue && inBar(open);
+      if (closes) { open.pop(); add(text, 'nest', open.length); }
+      else open.push(add(text, 'nest', open.length));
+      wantsValue = !closes;
+    } else if (m[10]) { add(text, 'assign'); wantsValue = true; }
+    else if (m[11]) { add(text, 'op'); wantsValue = true; }
+    else add(text, 'bad');
+  }
+
+  for (const tok of open) { tok.kind = 'bad'; delete tok.depth; }
+  return out;
 }

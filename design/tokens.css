@@ -12,6 +12,22 @@
   --panel: rgba(8, 7, 14, 0.82);
   --blue: #0400ff;
   --magenta: #ff2bd6;
+  --select: rgba(255, 43, 214, 0.32);
+
+  /* Syntax colours for a typed formula. The nest ramp cycles with depth, so
+     matching brackets and bars share a colour and neighbours never do. */
+  --syn-var: var(--magenta);
+  --syn-num: #ffc857;
+  --syn-const: #b388ff;
+  --syn-func: #4fd8ff;
+  --syn-op: #8c86a8;
+  --syn-bad: #ff5470;
+  --syn-nest-0: #f2eeff;
+  --syn-nest-1: #58e8a0;
+  --syn-nest-2: #ff9d4d;
+  --syn-nest-3: #6aa8ff;
+  --syn-nest-4: #ff7ad9;
+  --syn-nest-5: #d8f45c;
 
   --display: "Bahnschrift", "Avenir Next Condensed", "Arial Narrow", "Roboto Condensed", "Helvetica Neue", system-ui, sans-serif;
   --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
