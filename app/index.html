@@ -22,7 +22,7 @@
   <main id="menu" class="page">
     <header class="page-head">
       <h1 class="title">Fractal<br />Explorer</h1>
-      <p class="lede">Seven escape-time sets, or one of your own. Pick one, then pan and zoom until something looks worth keeping.</p>
+      <p class="lede">Seven escape-time sets, plus the ones you save. Pick one, then pan and zoom until something looks worth keeping.</p>
     </header>
 
     <p id="gpu-error" class="gpu-error" hidden></p>
@@ -92,11 +92,15 @@
   <main id="editor" class="page" hidden>
     <header class="page-head">
       <h1 class="title">Create<br />Fractal</h1>
-      <p class="lede">One formula, iterated until it escapes, from starting values you set.</p>
+      <p class="lede">One formula, iterated until it escapes, from starting values you set. Render it once, or save it to the menu.</p>
     </header>
 
     <div class="editor">
       <form id="editor-form" class="editor-form" autocomplete="off">
+        <label class="editor-label" for="fractal-name">Name</label>
+        <input id="fractal-name" class="input editor-name" type="text" maxlength="40" spellcheck="false"
+               aria-describedby="save-help" />
+
         <label class="editor-label" for="formula">Formula</label>
         <div class="editor-field">
           <div id="formula-ink" class="editor-ink" aria-hidden="true"></div>
@@ -139,9 +143,11 @@
 
         <div class="editor-actions">
           <button type="submit" class="btn btn-accent">Render</button>
+          <button type="button" id="editor-save" class="btn">Save</button>
           <button type="button" id="editor-cancel" class="btn">Cancel</button>
           <span id="formula-error" class="goto-error" role="alert"></span>
         </div>
+        <p id="save-help" class="editor-help">Save adds it to the menu under this name, and keeps it in this browser.</p>
         <p class="editor-fixed">Fixed in this first version: the orbit escapes at |z| &gt; 100, and the zoom stops at 10⁶.</p>
       </form>
 

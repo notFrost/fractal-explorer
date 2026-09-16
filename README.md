@@ -3,8 +3,8 @@
 **[Live demo](https://fractal-explorer-six.vercel.app/app/)**
 
 A web port of a PenguinMod project (`FractalExplorer.pmp`). Seven escape-time
-sets drawn on the GPU with WebGL2 fragment shaders, plus an eighth built from a
-formula you type. Six of them zoom without a precision limit; Pacman stops at
+sets drawn on the GPU with WebGL2 fragment shaders, plus any number built from
+a formula you type and save to the menu. Six of them zoom without a precision limit; Pacman stops at
 2^40. The original's camera model, pen colours, and controls carry over; the
 CPU pen-plotting does not.
 
@@ -202,6 +202,21 @@ read leaves the last picture up, dimmed, rather than blanking mid-keystroke. A
 formula previewed and then cancelled is dropped, and the shader goes back to
 the last one rendered.
 
+**Save**, beside Render, puts the formula in the menu under the name in the
+Name field. An empty field names it `Fractal 3`, counting the ones already
+saved. A saved fractal becomes a set of its own, with its shader compiled
+under an id of `saved1`, `saved2` and so on, a card and thumbnail at the end
+of the menu, and a hash of its own, `#saved2@x,y,zoom`. Its Menu button goes
+to the menu rather than back to the editor. The list is kept in this browser's
+local storage, so it survives a reload but does not travel with a link, and a
+`#saved2@` link only opens for the browser that saved it.
+
+The × in the corner of a saved card removes it. It puts the question over the
+card first, and Cancel or Esc backs out. Delete drops the card, its shader and
+its stored entry. Ids count up rather than filling the gap a deletion leaves,
+so an old `#saved1@` link falls back to the menu instead of opening a
+different fractal.
+
 What it reads: `z` and `c`, decimal numbers, `i`, `pi` and `e`; `+ - * / ^`
 with brackets, two values side by side for multiplication, letters written
 together as well, so `x+yi` reads as `x + y·i`; `abs re im conj exp log sqrt
@@ -229,9 +244,9 @@ The help line under a field prints each group in its colour, so it doubles as
 the key.
 
 Everything else is fixed in this first version: the orbit escapes at
-`|z| > 100`. There is no perturbed form of an arbitrary recurrence, so the
-custom set iterates directly in float32 and stops at 10^6 zoom, where the
-others hand over to a reference orbit. A formula can also overshoot the
+`|z| > 100`. There is no perturbed form of an arbitrary recurrence, so a typed
+set iterates directly in float32 and stops at 10^6 zoom, where the others hand
+over to a reference orbit. A formula can also overshoot the
 bailout or reach NaN, neither of which the smooth count survives, so a count
 it cannot read falls back to the step number. The text rides in the URL as
 `?f=` before the hash, with `?z=` and `?c=` for the starting values when they

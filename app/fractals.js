@@ -73,6 +73,7 @@ export const SETS = {
   custom: {
     name: 'Custom',
     formula: 'z ← z² + c',
+    custom: true,
     maxLogZoom: FLOAT_LOG_ZOOM,
     home: { x: -0.7, y: 0, zoom: 135 },
     bookmarks: [],

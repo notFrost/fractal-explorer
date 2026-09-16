@@ -3,6 +3,7 @@ import { Camera } from './precision.js';
 import { Renderer } from './gpu.js';
 import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palettes.js';
 import { parseFormula, parseSeed, formulaTokens, seedTokens } from './formula.js';
+import { readSaved, writeSaved, freeId, registerSet, unregisterSet } from './saved.js';
 
 // ---------- State ----------
 
@@ -23,6 +24,7 @@ const state = {
 
 const $ = (s) => document.querySelector(s);
 const menu = $('#menu');
+const cards = $('#cards');
 const viewer = $('#viewer');
 const canvas = $('#view');
 const hud = {
@@ -58,6 +60,7 @@ const editor = {
   page: $('#editor'),
   form: $('#editor-form'),
   error: $('#formula-error'),
+  name: $('#fractal-name'),
   input: { formula: $('#formula'), seedZ: $('#seed-z'), seedC: $('#seed-c') },
   ink: { formula: $('#formula-ink'), seedZ: $('#seed-z-ink'), seedC: $('#seed-c-ink') },
 };
@@ -273,8 +276,9 @@ function parseZoom(str) {
 const NUM = String.raw`[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?`;
 const COMPLEX = new RegExp(`^(${NUM})\\s*([-+])\\s*(${NUM})\\s*i(?:\\s*@\\s*(.+))?$`, 'i');
 
-// Julia links carry two extra fields for C.
-const LINK = new RegExp(
+// Julia links carry two extra fields for C. Saved sets join SETS as they load,
+// so the pattern is rebuilt per read.
+const linkPattern = () => new RegExp(
   `(${Object.keys(SETS).join('|')})@([^,\\s]+),([^,\\s]+),([^,\\s#]+)(?:,([^,\\s]+),([^,\\s#]+))?`,
   'i',
 );
@@ -283,7 +287,7 @@ const LINK = new RegExp(
 // Returns { set?, xs, ys, lz?, c? } with lz undefined when the text gives no zoom.
 function parseLocation(text) {
   const t = String(text).trim().replace(/[−–]/g, '-');
-  let m = LINK.exec(t);
+  let m = linkPattern().exec(t);
   if (m) {
     const pal = /[?&]palette=(\w+)/i.exec(t);
     return { set: m[1].toLowerCase(), xs: m[2], ys: m[3], lz: parseZoom(m[4]), c: readC(m[5], m[6]), palette: pal?.[1] };
@@ -367,7 +371,7 @@ hud.toggle.addEventListener('click', () => setHud(!hudOpen));
 
 function showSetLabel() {
   const text = state.set === 'julia' ? `C = ${juliaText(state.julia)}`
-    : state.set === 'custom' ? SETS.custom.formula
+    : SETS[state.set].custom ? SETS[state.set].formula
     : '';
   setLabel.textContent = text;
   setLabel.hidden = !text;
@@ -520,9 +524,11 @@ function writeCustomUrl(texts, parsed) {
   history.replaceState(null, '', url);
 }
 
+const trimTexts = (texts) => Object.fromEntries(FIELDS.map((f) => [f.key, String(texts[f.key] ?? '').trim()]));
+
 function applyCustom(texts) {
   if (!renderer) return 'this browser has no WebGL2';
-  const trimmed = Object.fromEntries(FIELDS.map((f) => [f.key, String(texts[f.key] ?? '').trim()]));
+  const trimmed = trimTexts(texts);
   let parsed;
   try {
     parsed = parseCustom(trimmed);
@@ -531,7 +537,7 @@ function applyCustom(texts) {
   }
   const parts = shaderParts(parsed);
   try {
-    renderer.setCustom(parts);
+    renderer.setCustom('custom', parts);
   } catch {
     return 'the GPU would not compile that formula';
   }
@@ -543,7 +549,7 @@ function applyCustom(texts) {
   return null;
 }
 
-const hasCustom = () => Boolean(renderer?.custom);
+const hasCustom = () => Boolean(renderer?.customs.has('custom'));
 
 let previewTimer = 0;
 let previewKey = '';
@@ -556,7 +562,7 @@ function drawPreview(parts, home) {
   c.height = Math.round(w * 0.75);
   canvas.width = c.width;
   canvas.height = c.height;
-  renderer.setCustom(parts);
+  renderer.setCustom('custom', parts);
   const cam = new Camera(home.x, home.y, home.zoom);
   renderer.renderAll({ set: 'custom', cam, maxIter: iterationsFor(cam.lz, 1, 'custom') });
   c.getContext('2d').drawImage(canvas, 0, 0);
@@ -592,7 +598,7 @@ function schedulePreview() {
 }
 
 function leaveEditor() {
-  renderer?.setCustom(committed?.parts ?? null);
+  renderer?.setCustom('custom', committed?.parts ?? null);
   previewKey = '';
   showMenu();
 }
@@ -612,6 +618,7 @@ function showEditor() {
     paintField(f);
   }
   editor.error.textContent = '';
+  editor.name.placeholder = defaultName();
   updatePreview();
   editor.input.formula.focus();
   editor.input.formula.select();
@@ -639,6 +646,70 @@ for (const f of FIELDS) {
 
 $('#editor-cancel').addEventListener('click', leaveEditor);
 $('#create').addEventListener('click', showEditor);
+
+// ---------- Saved fractals ----------
+
+const savedFractals = readSaved();
+
+function defaultName() {
+  const taken = new Set(savedFractals.map((f) => f.name));
+  for (let n = savedFractals.length + 1; ; n++) {
+    const name = `Fractal ${n}`;
+    if (!taken.has(name)) return name;
+  }
+}
+
+function addSavedSet(fractal) {
+  if (!renderer) return 'this browser has no WebGL2';
+  let parsed;
+  try {
+    parsed = parseCustom(fractal);
+  } catch (err) {
+    return err.message;
+  }
+  try {
+    renderer.setCustom(fractal.id, shaderParts(parsed));
+  } catch {
+    return 'the GPU would not compile that formula';
+  }
+  registerSet(fractal.id, { name: fractal.name, formula: customLabel(parsed), home: customHome(parsed) });
+  makeCard(fractal.id);
+  return null;
+}
+
+function deleteSaved(id) {
+  const at = savedFractals.findIndex((f) => f.id === id);
+  if (at >= 0) {
+    savedFractals.splice(at, 1);
+    writeSaved(savedFractals);
+  }
+  dropSavedSet(id);
+  $('#create').focus();
+}
+
+function dropSavedSet(id) {
+  renderer?.setCustom(id, null);
+  unregisterSet(id);
+  cards.querySelector(`.card[data-set="${id}"]`)?.closest('li')?.remove();
+}
+
+$('#editor-save').addEventListener('click', () => {
+  const fractal = {
+    id: freeId(savedFractals),
+    name: editor.name.value.trim() || defaultName(),
+    ...trimTexts(editorTexts()),
+  };
+  const err = addSavedSet(fractal) || writeSaved([...savedFractals, fractal]);
+  if (err) {
+    dropSavedSet(fractal.id);
+    editor.error.textContent = err;
+    return;
+  }
+  savedFractals.push(fractal);
+  editor.name.value = '';
+  leaveEditor();
+  cards.querySelector(`.card[data-set="${fractal.id}"]`)?.focus();
+});
 
 // A coordinate pasted anywhere in the viewer goes straight there.
 window.addEventListener('paste', (e) => {
@@ -968,6 +1039,75 @@ function renderCards() {
   }
 }
 
+function makeCard(set) {
+  const li = document.createElement('li');
+  li.className = 'card-slot';
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.className = 'card';
+  card.dataset.set = set;
+  const thumb = document.createElement('canvas');
+  thumb.className = 'thumb';
+  thumb.width = 240;
+  thumb.height = 180;
+  thumb.setAttribute('aria-hidden', 'true');
+  const name = document.createElement('span');
+  name.className = 'card-name';
+  name.textContent = SETS[set].name;
+  const formula = document.createElement('span');
+  formula.className = 'card-formula';
+  formula.textContent = SETS[set].formula;
+  card.append(thumb, name, formula);
+  li.append(card, ...deleteControls(set, li));
+  cards.append(li);
+}
+
+// The × and the question that replaces it are siblings of the card, since a
+// button cannot hold another one.
+function deleteControls(set, slot) {
+  const question = `Delete ${SETS[set].name}?`;
+  const ask = document.createElement('button');
+  ask.type = 'button';
+  ask.className = 'card-delete';
+  ask.title = question;
+  ask.setAttribute('aria-label', question);
+  ask.textContent = '×';
+
+  const panel = document.createElement('div');
+  panel.className = 'card-confirm';
+  panel.hidden = true;
+  panel.setAttribute('role', 'group');
+  panel.setAttribute('aria-label', question);
+  const text = document.createElement('p');
+  text.className = 'card-confirm-text';
+  text.textContent = question;
+  const yes = document.createElement('button');
+  yes.type = 'button';
+  yes.className = 'btn btn-accent';
+  yes.textContent = 'Delete';
+  const no = document.createElement('button');
+  no.type = 'button';
+  no.className = 'btn';
+  no.textContent = 'Cancel';
+  const row = document.createElement('div');
+  row.className = 'card-confirm-row';
+  row.append(yes, no);
+  panel.append(text, row);
+
+  const open = (on) => {
+    panel.hidden = !on;
+    ask.hidden = on;
+    slot.classList.toggle('asking', on);
+    (on ? yes : ask).focus();
+  };
+  const close = () => open(false);
+  ask.addEventListener('click', () => open(true));
+  no.addEventListener('click', close);
+  panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  yes.addEventListener('click', () => deleteSaved(set));
+  return [ask, panel];
+}
+
 function homeView(set) {
   const { x, y, zoom } = SETS[set].home;
   const aspect = window.innerWidth / window.innerHeight;
@@ -975,18 +1115,20 @@ function homeView(set) {
   return { x, y, zoom: 2 ** clampLogZoom(Math.log2((zoom * aspect * 3) / 4), set) };
 }
 
-for (const card of document.querySelectorAll('.card')) {
-  card.addEventListener('click', () => {
-    state.julia = { ...SETS.julia.c };
-    showViewer(card.dataset.set, homeView(card.dataset.set));
-  });
-}
+cards.addEventListener('click', (e) => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  state.julia = { ...SETS.julia.c };
+  showViewer(card.dataset.set, homeView(card.dataset.set));
+});
 
 // ---------- Boot ----------
 
-window.__fx = { state, showViewer, showMenu, showEditor, renderCards, render, renderer, iterationsFor, updatePreview, Camera, parseLocation, parseZoom, goTo, applyJulia, applyCustom, setPalette };
+window.__fx = { state, showViewer, showMenu, showEditor, renderCards, render, renderer, iterationsFor, updatePreview, Camera, parseLocation, parseZoom, goTo, applyJulia, applyCustom, setPalette, savedFractals };
 
 setPalette(initialPalette(), { render: false });
+
+for (const fractal of savedFractals) addSavedSet(fractal);
 
 const params = new URLSearchParams(location.search);
 if (params.get('f')) {

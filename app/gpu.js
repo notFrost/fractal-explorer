@@ -9,6 +9,8 @@ const REF_W = 1024;
 
 const STRIP_BUDGET = 2e9;
 
+const customKey = (parts) => (parts ? `${parts.iter}|${parts.seedZ}|${parts.seedC}` : null);
+
 function compile(gl, type, src) {
   const s = gl.createShader(type);
   gl.shaderSource(s, src);
@@ -33,8 +35,7 @@ export class Renderer {
     if (!this.gl) throw new Error('WebGL2 is not available in this browser.');
     this.lost = false;
     this.palette = 0;
-    this.custom = null;
-    this.customKey = null;
+    this.customs = new Map();
     canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; });
     canvas.addEventListener('webglcontextrestored', () => { this.lost = false; this.setup(); });
     this.setup();
@@ -48,12 +49,9 @@ export class Renderer {
     for (const [name, body] of Object.entries(SOURCES)) {
       this.programs[name] = this.link(COMMON + body);
     }
-    if (this.custom) {
-      const parts = this.custom;
-      this.custom = null;
-      this.customKey = null;
-      this.setCustom(parts);
-    }
+    const customs = this.customs;
+    this.customs = new Map();
+    for (const [name, parts] of customs) this.setCustom(name, parts);
     this.refRows = Math.ceil((2 * MAX_ITER + 4) / REF_W);
     this.refBuf = new Float32Array(REF_W * this.refRows * 4);
     this.refTex = gl.createTexture();
@@ -80,15 +78,17 @@ export class Renderer {
     return { p, u: Object.fromEntries(UNIFORMS.map((n) => [n, gl.getUniformLocation(p, n)])) };
   }
 
-  setCustom(parts) {
-    const key = parts ? `${parts.iter}|${parts.seedZ}|${parts.seedC}` : null;
-    if (key === this.customKey) return;
+  setCustom(name, parts) {
+    if (customKey(parts) === customKey(this.customs.get(name) ?? null)) return;
     const prog = parts && this.link(COMMON + customBody(parts));
-    if (this.programs.custom) this.gl.deleteProgram(this.programs.custom.p);
-    if (prog) this.programs.custom = prog;
-    else delete this.programs.custom;
-    this.custom = parts || null;
-    this.customKey = key;
+    if (this.programs[name]) this.gl.deleteProgram(this.programs[name].p);
+    if (prog) {
+      this.programs[name] = prog;
+      this.customs.set(name, parts);
+    } else {
+      delete this.programs[name];
+      this.customs.delete(name);
+    }
   }
 
   ensureReference(view, iters, screenPx) {

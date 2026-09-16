@@ -39,6 +39,95 @@
   transition: transform var(--motion);
 }
 
+/* A saved card carries a × and the question it opens. Both sit over the card,
+   so the slot around it is the positioned box, and the wobble moves there too
+   to carry them along. It stops while the question is up. */
+.card-slot {
+  --wobble-scale: 1.06;
+  --wobble-tilt: 2deg;
+  position: relative;
+  transform: rotate(0deg) scale(1);
+  transition: transform var(--motion);
+}
+
+.card-slot:hover,
+.card-slot:focus-within {
+  transform: scale(var(--wobble-scale));
+  animation: wobble 900ms ease-in-out infinite;
+}
+
+.card-slot .card:hover,
+.card-slot .card:focus-visible,
+.card-slot.asking,
+.card-slot.asking:hover,
+.card-slot.asking:focus-within {
+  transform: none;
+  animation: none;
+}
+
+.card-delete {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  font-size: 1.3rem;
+  line-height: 1;
+  color: var(--dim);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  backdrop-filter: var(--glass);
+  opacity: 0.6;
+  transition: opacity var(--motion), color var(--motion), border-color var(--motion);
+}
+
+.card-delete[hidden] { display: none; }
+
+.card-slot:hover .card-delete,
+.card-delete:focus-visible {
+  opacity: 1;
+}
+
+.card-delete:hover,
+.card-delete:focus-visible {
+  color: var(--magenta);
+  border-color: var(--magenta);
+}
+
+.card-confirm {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.8rem;
+  padding: 1rem;
+  text-align: center;
+  background: var(--panel);
+  border: 1px solid var(--magenta);
+  backdrop-filter: var(--glass);
+}
+
+.card-confirm[hidden] { display: none; }
+
+.card-confirm-text {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.card-confirm-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-delete { transition: none; }
+  .card-slot { transition: none; }
+  .card-slot:hover, .card-slot:focus-within { animation: none; transform: scale(1.03); }
+}
+
 .card-name {
   font-family: var(--display);
   font-stretch: condensed;
