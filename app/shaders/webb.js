@@ -24,8 +24,8 @@ float escape(vec2 dc) {
   vec2 e = vec2(0.0);
   int m = 0;
   int last = u_refLen - 1;
-  vec4 R = refAt(0);      // Z_m, Z_m − Z_0
-  vec2 P = vec2(0.0);     // Z_{m−1}
+  vec4 R = refAt(0);
+  vec2 P = vec2(0.0);
   for (int n = 0; n < u_maxIter; n++) {
     vec2 nd = cmul(2.0 * R.xy + d, d) + e;
     e = d;

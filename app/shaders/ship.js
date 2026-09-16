@@ -48,7 +48,7 @@ void main() {
 export const SHIP_FE = FE_LIB + `
 float diffabsScaled(float X, float m, int e) {
   if (X == 0.0) return abs(m);
-  int gap = (((floatBitsToInt(X) >> 23) & 255) - 127) - e;   // log2|X| − e
+  int gap = (((floatBitsToInt(X) >> 23) & 255) - 127) - e;
   if (gap > 30) return X > 0.0 ? m : -m;
   float Xs = X * pow2(-e);
   if (X > 0.0) return Xs + m >= 0.0 ? m : -(2.0 * Xs + m);
@@ -57,7 +57,7 @@ float diffabsScaled(float X, float m, int e) {
 
 float escape(FE dc) {
   FE d = FE(vec2(0.0), EMIN);
-  FE dcc = FE(vec2(dc.m.x, -dc.m.y), dc.e);   // + c̄
+  FE dcc = FE(vec2(dc.m.x, -dc.m.y), dc.e);
   int m = 0;
   int last = u_refLen - 1;
   for (int n = 0; n < u_maxIter; n++) {

@@ -30,49 +30,49 @@
     <ul class="cards" id="cards" aria-label="Fractal sets">
       <li>
         <button class="card" data-set="mandelbrot" type="button">
-          <canvas class="card-canvas" width="240" height="180" aria-hidden="true"></canvas>
+          <canvas class="thumb" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">Mandelbrot</span>
           <span class="card-formula">z ← z² + c</span>
         </button>
       </li>
       <li>
         <button class="card" data-set="collatz" type="button">
-          <canvas class="card-canvas" width="240" height="180" aria-hidden="true"></canvas>
+          <canvas class="thumb" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">Collatz</span>
           <span class="card-formula">z ← 3z + 1  or  z / 2</span>
         </button>
       </li>
       <li>
         <button class="card" data-set="webb" type="button">
-          <canvas class="card-canvas" width="240" height="180" aria-hidden="true"></canvas>
+          <canvas class="thumb" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">Webb</span>
           <span class="card-formula">zₙ₊₁ ← zₙ² + zₙ₋₁</span>
         </button>
       </li>
       <li>
         <button class="card" data-set="julia" type="button">
-          <canvas class="card-canvas" width="240" height="180" aria-hidden="true"></canvas>
+          <canvas class="thumb" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">Julia</span>
           <span class="card-formula">z ← z² + C</span>
         </button>
       </li>
       <li>
         <button class="card" data-set="burningship" type="button">
-          <canvas class="card-canvas" width="240" height="180" aria-hidden="true"></canvas>
+          <canvas class="thumb" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">Burning Ship</span>
           <span class="card-formula">z ← (|Re&nbsp;z|&nbsp;+&nbsp;i|Im&nbsp;z|)² + c̄</span>
         </button>
       </li>
       <li>
         <button class="card" data-set="mandelbug" type="button">
-          <canvas class="card-canvas" width="240" height="180" aria-hidden="true"></canvas>
+          <canvas class="thumb" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">MandelBug</span>
           <span class="card-formula">z ← Re(z²) + 2i(Re&nbsp;z&nbsp;+&nbsp;Im&nbsp;z) + c</span>
         </button>
       </li>
       <li>
         <button class="card" data-set="pacman" type="button">
-          <canvas class="card-canvas" width="240" height="180" aria-hidden="true"></canvas>
+          <canvas class="thumb" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">Pacman</span>
           <span class="card-formula">z ← zᶻ + c</span>
         </button>
@@ -95,22 +95,30 @@
       <p class="lede">One formula, iterated from z = 0 with c at the pixel. Everything else is fixed for now.</p>
     </header>
 
-    <form id="editor-form" class="editor" autocomplete="off">
-      <label class="editor-label" for="formula">Formula</label>
-      <input id="formula" class="input editor-input" type="text" spellcheck="false" autocapitalize="off"
-             placeholder="Z_(n+1) = Z_(n)^2 + C" aria-describedby="formula-help" />
-      <p id="formula-help" class="editor-help">
-        <span>z and c, numbers, i, pi, e</span>
-        <span>+ − × ÷ ^ and brackets</span>
-        <span>abs re im conj exp log sqrt sin cos tan sinh cosh tanh</span>
-      </p>
-      <div class="editor-actions">
-        <button type="submit" class="btn btn-accent">Render</button>
-        <button type="button" id="editor-cancel" class="btn">Cancel</button>
-        <span id="formula-error" class="goto-error" role="alert"></span>
-      </div>
-      <p class="editor-fixed">Fixed in this first version: z starts at 0, c is the pixel, the orbit escapes at |z| &gt; 100, and the zoom stops at 10⁶.</p>
-    </form>
+    <div class="editor">
+      <form id="editor-form" class="editor-form" autocomplete="off">
+        <label class="editor-label" for="formula">Formula</label>
+        <input id="formula" class="input editor-input" type="text" spellcheck="false" autocapitalize="off"
+               placeholder="Z_(n+1) = Z_(n)^2 + C" aria-describedby="formula-help" />
+        <p id="formula-help" class="editor-help">
+          <span>z and c, numbers, i, pi, e</span>
+          <span>+ − × ÷ ^ and brackets</span>
+          <span>abs re im conj exp log sqrt sin cos tan sinh cosh tanh</span>
+        </p>
+        <div class="editor-actions">
+          <button type="submit" class="btn btn-accent">Render</button>
+          <button type="button" id="editor-cancel" class="btn">Cancel</button>
+          <span id="formula-error" class="goto-error" role="alert"></span>
+        </div>
+        <p class="editor-fixed">Fixed in this first version: z starts at 0, c is the pixel, the orbit escapes at |z| &gt; 100, and the zoom stops at 10⁶.</p>
+      </form>
+
+      <aside id="preview" class="editor-preview">
+        <span class="editor-label">Preview</span>
+        <canvas id="preview-canvas" class="thumb" width="320" height="240" aria-hidden="true"></canvas>
+        <p id="preview-note" class="preview-note" aria-live="polite"></p>
+      </aside>
+    </div>
 
     <footer class="page-foot">
       <span>The formula becomes a fragment shader and draws like the built-in sets.</span>

@@ -182,6 +182,14 @@ Z_(n)^2 + C`, or `z ← z² + c`, or just `z^2 + c` — and renders it. The text
 parsed into an expression and compiled into a fragment shader, so a typed
 formula draws on the same path as the built-in sets.
 
+Beside the field is a live preview of the view **Render** will open on, at
+most 640 pixels across. It redraws a quarter second after the last keystroke,
+on the same GL canvas the menu cards use, and prints underneath how the parser
+read the line, so a typed `zᶻ + c` shows as `z ← z^(z) + c`. Text the parser
+cannot read leaves the last picture up, dimmed, rather than blanking
+mid-keystroke. A formula previewed and then cancelled is dropped, and the
+shader goes back to the last one rendered.
+
 What it reads: `z` and `c`, decimal numbers, `i`, `pi` and `e`; `+ - * / ^`
 with brackets, two values side by side for multiplication; and `abs re im
 conj exp log sqrt sin cos tan sinh cosh tanh`, each of one argument. The

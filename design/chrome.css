@@ -114,6 +114,16 @@
 .input:focus { outline: none; border-color: var(--magenta); }
 .input::placeholder { color: var(--dim); }
 
+/* Canvas for a fractal thumbnail: menu cards, editor preview. */
+.thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--line);
+  background: #000;
+}
+
 /* ---------- Motion ---------- */
 
 /* The original rocked hovered buttons a couple of degrees either way.

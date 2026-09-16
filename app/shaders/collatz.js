@@ -15,7 +15,7 @@ float escape(vec2 c) {
   int steps = min(u_maxIter, 500) - 2;
   for (int n = 0; n < steps; n++) {
     z = step_(z);
-    if (!(dot(z, z) < 1e30)) break;   // overflowed: parity is 0 forever after
+    if (!(dot(z, z) < 1e30)) break;
   }
   return dot(z, z) > 25.0 ? fallback : 0.0;
 }
@@ -26,7 +26,7 @@ void main() {
 }`;
 
 export const COLLATZ_PERT = FE_LIB + `
-const float EVEN_ONLY = 16777216.0;   // float32 has only even integers above this
+const float EVEN_ONLY = 16777216.0;
 
 float pixelParity(vec2 P, FE d, float lo, float hi, float par) {
   vec2 df = feToFloat(d);
@@ -36,7 +36,6 @@ float pixelParity(vec2 P, FE d, float lo, float hi, float par) {
   float den = length(P + df) + length(P);
   FE dr = fe(vec2(num.m.x / den, 0.0), num.e);
   if (dr.e < -100) {
-    // Far below float32: at most one boundary is in reach, compare in log2.
     float L = log2(abs(dr.m.x)) + float(dr.e);
     bool cross = (dr.m.x < 0.0 && L > lo) || (dr.m.x > 0.0 && L >= hi);
     return cross ? 1.0 - par : par;
@@ -64,7 +63,6 @@ float escape(FE dc) {
       hi = R.w;
       par = refAt(2 * m + 1).x;
     } else {
-      // Off the reference: the base is float32, so are its boundary distances.
       float r = length(P);
       float k = floor(r);
       par = mod(k, 2.0);

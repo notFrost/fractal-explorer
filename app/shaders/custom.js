@@ -1,4 +1,3 @@
-
 export const CUSTOM_LIB = `
 vec2 cdiv(vec2 a, vec2 b) { return vec2(dot(a, b), a.y * b.x - a.x * b.y) / dot(b, b); }
 vec2 cre(vec2 z) { return vec2(z.x, 0.0); }

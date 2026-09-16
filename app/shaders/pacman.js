@@ -1,4 +1,3 @@
-
 export const PACMAN_PERT = `
 const float TAU = 6.2831853071795864;
 const float PI = 3.1415926535897932;

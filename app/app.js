@@ -57,6 +57,11 @@ const editor = {
   input: $('#formula'),
   error: $('#formula-error'),
 };
+const preview = {
+  box: $('#preview'),
+  canvas: $('#preview-canvas'),
+  note: $('#preview-note'),
+};
 
 let renderer = null;
 let mode = 'menu';
@@ -66,6 +71,7 @@ try {
 } catch (err) {
   $('#gpu-error').hidden = false;
   $('#gpu-error').textContent = `${err.message} This explorer renders on the GPU and needs WebGL2.`;
+  preview.box.hidden = true;
 }
 
 const iterNow = () => iterationsFor(state.cam.lz, state.detail, state.set);
@@ -419,6 +425,10 @@ juliaUi.presets.replaceChildren(
 // ---------- The formula editor ----------
 
 const DEFAULT_FORMULA = 'Z_(n+1) = Z_(n)^2 + C';
+const PREVIEW_MAX_PX = 640;
+const PREVIEW_DELAY = 250;
+
+let committedExpr = null;
 
 function applyFormula(text) {
   if (!renderer) return 'this browser has no WebGL2';
@@ -433,6 +443,7 @@ function applyFormula(text) {
   } catch {
     return 'the GPU would not compile that formula';
   }
+  committedExpr = parsed.glsl;
   state.formula = String(text).trim();
   SETS.custom.formula = `z ← ${parsed.text}`;
   const url = new URL(location.href);
@@ -442,6 +453,58 @@ function applyFormula(text) {
 }
 
 const hasCustom = () => Boolean(renderer?.customExpr);
+
+let previewTimer = 0;
+let previewKey = '';
+
+function drawPreview(expr) {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const c = preview.canvas;
+  const w = Math.min(PREVIEW_MAX_PX, Math.round((c.clientWidth || 320) * dpr));
+  c.width = w;
+  c.height = Math.round(w * 0.75);
+  canvas.width = c.width;
+  canvas.height = c.height;
+  renderer.setCustom(expr);
+  const { x, y, zoom } = SETS.custom.home;
+  const cam = new Camera(x, y, zoom);
+  renderer.renderAll({ set: 'custom', cam, maxIter: iterationsFor(cam.lz, 1, 'custom') });
+  c.getContext('2d').drawImage(canvas, 0, 0);
+}
+
+function updatePreview(text) {
+  if (!renderer || mode !== 'editor') return;
+  let parsed;
+  try {
+    parsed = parseFormula(text);
+  } catch {
+    preview.box.classList.add('stale');
+    return;
+  }
+  const key = `${parsed.glsl}|${state.palette}`;
+  if (key !== previewKey) {
+    try {
+      drawPreview(parsed.glsl);
+    } catch {
+      preview.box.classList.add('stale');
+      return;
+    }
+    previewKey = key;
+    preview.note.textContent = `z ← ${parsed.text}`;
+  }
+  preview.box.classList.remove('stale');
+}
+
+function schedulePreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => updatePreview(editor.input.value), PREVIEW_DELAY);
+}
+
+function leaveEditor() {
+  renderer?.setCustom(committedExpr);
+  previewKey = '';
+  showMenu();
+}
 
 function showEditor() {
   keys.clear();
@@ -453,6 +516,7 @@ function showEditor() {
   editor.page.hidden = false;
   editor.input.value = state.formula || DEFAULT_FORMULA;
   editor.error.textContent = '';
+  updatePreview(editor.input.value);
   editor.input.focus();
   editor.input.select();
 }
@@ -467,8 +531,11 @@ editor.form.addEventListener('submit', (e) => {
   showViewer('custom', homeView('custom'));
 });
 
-editor.input.addEventListener('input', () => { editor.error.textContent = ''; });
-$('#editor-cancel').addEventListener('click', showMenu);
+editor.input.addEventListener('input', () => {
+  editor.error.textContent = '';
+  schedulePreview();
+});
+$('#editor-cancel').addEventListener('click', leaveEditor);
 $('#create').addEventListener('click', showEditor);
 
 // A coordinate pasted anywhere in the viewer goes straight there.
@@ -529,7 +596,7 @@ const STEP_LZ = Math.log2(1.2);
 
 window.addEventListener('keydown', (e) => {
   if (mode === 'editor') {
-    if (e.key === 'Escape') showMenu();
+    if (e.key === 'Escape') leaveEditor();
     return;
   }
   if (mode !== 'view') return;
@@ -808,7 +875,7 @@ for (const card of document.querySelectorAll('.card')) {
 
 // ---------- Boot ----------
 
-window.__fx = { state, showViewer, showMenu, showEditor, renderCards, render, renderer, iterationsFor, Camera, parseLocation, parseZoom, goTo, applyJulia, applyFormula, setPalette };
+window.__fx = { state, showViewer, showMenu, showEditor, renderCards, render, renderer, iterationsFor, updatePreview, Camera, parseLocation, parseZoom, goTo, applyJulia, applyFormula, setPalette };
 
 setPalette(initialPalette(), { render: false });
 
