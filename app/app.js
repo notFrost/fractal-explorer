@@ -61,6 +61,8 @@ const editor = {
   form: $('#editor-form'),
   error: $('#formula-error'),
   name: $('#fractal-name'),
+  verb: $('#editor-verb'),
+  saveHelp: $('#save-help'),
   input: { formula: $('#formula'), seedZ: $('#seed-z'), seedC: $('#seed-c') },
   ink: { formula: $('#formula-ink'), seedZ: $('#seed-z-ink'), seedC: $('#seed-c-ink') },
 };
@@ -450,6 +452,15 @@ const SEED_FIELDS = FIELDS.slice(1);
 
 let committed = null;
 
+// The set the editor opened from, or null for a new fractal.
+let openedFrom = null;
+
+// The texts the fields take, dropped once they have them, so a trip out to
+// Render and back keeps what was typed rather than reloading the set.
+let opensWith = null;
+
+const overwrites = () => (SETS[openedFrom]?.custom ? openedFrom : null);
+
 const TOKEN_CLASS = {
   var: 'tok-var',
   num: 'tok-num',
@@ -600,6 +611,7 @@ function schedulePreview() {
 function leaveEditor() {
   renderer?.setCustom('custom', committed?.parts ?? null);
   previewKey = '';
+  openedFrom = null;
   showMenu();
 }
 
@@ -614,11 +626,16 @@ function showEditor() {
   clearTimeout(hashTimer);
   history.replaceState(null, '', location.pathname + location.search);
   for (const f of FIELDS) {
-    editor.input[f.key].value = state[f.key] || DEFAULTS[f.key];
+    editor.input[f.key].value = opensWith?.[f.key] ?? (state[f.key] || DEFAULTS[f.key]);
     paintField(f);
   }
+  opensWith = null;
   editor.error.textContent = '';
   editor.name.placeholder = defaultName();
+  editor.verb.textContent = openedFrom ? 'Edit' : 'Create';
+  editor.saveHelp.textContent = overwrites()
+    ? 'Save replaces it in the menu, under the name above.'
+    : 'Save adds it to the menu under this name, and keeps it in this browser.';
   updatePreview();
   editor.input.formula.focus();
   editor.input.formula.select();
@@ -644,22 +661,35 @@ for (const f of FIELDS) {
   input.addEventListener('scroll', () => { editor.ink[f.key].scrollLeft = input.scrollLeft; });
 }
 
+function editFractal(set) {
+  openedFrom = set;
+  opensWith = SETS[set].edit;
+  editor.name.value = SETS[set].custom ? SETS[set].name : '';
+  showEditor();
+}
+
 $('#editor-cancel').addEventListener('click', leaveEditor);
-$('#create').addEventListener('click', showEditor);
+
+$('#create').addEventListener('click', () => {
+  openedFrom = null;
+  opensWith = null;
+  editor.name.value = '';
+  showEditor();
+});
 
 // ---------- Saved fractals ----------
 
 const savedFractals = readSaved();
 
 function defaultName() {
-  const taken = new Set(savedFractals.map((f) => f.name));
+  const taken = new Set(savedFractals.filter((f) => f.id !== openedFrom).map((f) => f.name));
   for (let n = savedFractals.length + 1; ; n++) {
     const name = `Fractal ${n}`;
     if (!taken.has(name)) return name;
   }
 }
 
-function addSavedSet(fractal) {
+function registerFractal(fractal) {
   if (!renderer) return 'this browser has no WebGL2';
   let parsed;
   try {
@@ -672,8 +702,35 @@ function addSavedSet(fractal) {
   } catch {
     return 'the GPU would not compile that formula';
   }
-  registerSet(fractal.id, { name: fractal.name, formula: customLabel(parsed), home: customHome(parsed) });
-  makeCard(fractal.id);
+  registerSet(fractal.id, {
+    name: fractal.name,
+    formula: customLabel(parsed),
+    home: customHome(parsed),
+    edit: trimTexts(fractal),
+  });
+  return null;
+}
+
+// The shader, the stored list and the card move together, so a save the
+// browser refuses leaves the fractal as it was.
+function saveFractal(fractal) {
+  const at = savedFractals.findIndex((f) => f.id === fractal.id);
+  const list = at < 0
+    ? [...savedFractals, fractal]
+    : savedFractals.map((f) => (f.id === fractal.id ? fractal : f));
+  const err = registerFractal(fractal) || writeSaved(list);
+  if (err) {
+    if (at < 0) dropSavedSet(fractal.id);
+    else registerFractal(savedFractals[at]);
+    return err;
+  }
+  if (at < 0) {
+    savedFractals.push(fractal);
+    cards.append(makeCard(fractal.id));
+  } else {
+    savedFractals[at] = fractal;
+    slotOf(fractal.id)?.replaceWith(makeCard(fractal.id));
+  }
   return null;
 }
 
@@ -690,23 +747,20 @@ function deleteSaved(id) {
 function dropSavedSet(id) {
   renderer?.setCustom(id, null);
   unregisterSet(id);
-  cards.querySelector(`.card[data-set="${id}"]`)?.closest('li')?.remove();
+  slotOf(id)?.remove();
 }
 
 $('#editor-save').addEventListener('click', () => {
   const fractal = {
-    id: freeId(savedFractals),
+    id: overwrites() ?? freeId(savedFractals),
     name: editor.name.value.trim() || defaultName(),
     ...trimTexts(editorTexts()),
   };
-  const err = addSavedSet(fractal) || writeSaved([...savedFractals, fractal]);
+  const err = saveFractal(fractal);
   if (err) {
-    dropSavedSet(fractal.id);
     editor.error.textContent = err;
     return;
   }
-  savedFractals.push(fractal);
-  editor.name.value = '';
   leaveEditor();
   cards.querySelector(`.card[data-set="${fractal.id}"]`)?.focus();
 });
@@ -1039,6 +1093,10 @@ function renderCards() {
   }
 }
 
+function slotOf(set) {
+  return cards.querySelector(`.card[data-set="${set}"]`)?.closest('li');
+}
+
 function makeCard(set) {
   const li = document.createElement('li');
   li.className = 'card-slot';
@@ -1058,8 +1116,23 @@ function makeCard(set) {
   formula.className = 'card-formula';
   formula.textContent = SETS[set].formula;
   card.append(thumb, name, formula);
-  li.append(card, ...deleteControls(set, li));
-  cards.append(li);
+  li.append(card, editControl(set), ...deleteControls(set, li));
+  return li;
+}
+
+// Every card has one. A set whose iteration the editor cannot write is greyed,
+// and says so rather than going quiet.
+function editControl(set) {
+  const { name, edit, unwritable } = SETS[set];
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'card-tool card-edit';
+  btn.textContent = 'Edit';
+  btn.disabled = !edit;
+  btn.title = edit ? `Edit ${name}` : unwritable;
+  btn.setAttribute('aria-label', edit ? `Edit ${name}` : `Edit ${name}: ${unwritable}`);
+  btn.addEventListener('click', () => editFractal(set));
+  return btn;
 }
 
 // The × and the question that replaces it are siblings of the card, since a
@@ -1068,7 +1141,7 @@ function deleteControls(set, slot) {
   const question = `Delete ${SETS[set].name}?`;
   const ask = document.createElement('button');
   ask.type = 'button';
-  ask.className = 'card-delete';
+  ask.className = 'card-tool card-delete';
   ask.title = question;
   ask.setAttribute('aria-label', question);
   ask.textContent = '×';
@@ -1124,11 +1197,15 @@ cards.addEventListener('click', (e) => {
 
 // ---------- Boot ----------
 
-window.__fx = { state, showViewer, showMenu, showEditor, renderCards, render, renderer, iterationsFor, updatePreview, Camera, parseLocation, parseZoom, goTo, applyJulia, applyCustom, setPalette, savedFractals };
+window.__fx = { state, showViewer, showMenu, showEditor, editFractal, renderCards, render, renderer, iterationsFor, updatePreview, Camera, parseLocation, parseZoom, goTo, applyJulia, applyCustom, setPalette, savedFractals };
 
 setPalette(initialPalette(), { render: false });
 
-for (const fractal of savedFractals) addSavedSet(fractal);
+for (const card of cards.querySelectorAll('.card')) card.after(editControl(card.dataset.set));
+
+for (const fractal of savedFractals) {
+  if (!registerFractal(fractal)) cards.append(makeCard(fractal.id));
+}
 
 const params = new URLSearchParams(location.search);
 if (params.get('f')) {
