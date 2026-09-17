@@ -238,11 +238,12 @@ local storage, so it survives a reload but does not travel with a link, and a
 `#saved2@` link only opens for the browser that saved it.
 
 **Edit**, in the top left of every card, opens that set in the editor with its
-formula and its two starting values already in the fields. On a fractal you
-saved, Save replaces it where it stands, under the same id, the same `#saved2@`
-link and the same place in the menu. On a built-in set it is a line to start
-from rather than a change to the set itself. Mandelbrot stays Mandelbrot, and
-Save adds what you made beside it.
+formula, its two starting values and any variables it carries already in the
+fields. A built-in set brings no variables, so the rows start empty. On a
+fractal you saved, Save replaces it where it stands, under the same id, the
+same `#saved2@` link and the same place in the menu. On a built-in set it is a
+line to start from rather than a change to the set itself. Mandelbrot stays
+Mandelbrot, and Save adds what you made beside it.
 
 Five of the seven built-in sets are written out for the editor. Mandelbrot is
 `z^2 + c`. Julia is the same line with `z₀ = x+yi` and `c` held at
