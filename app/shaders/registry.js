@@ -5,6 +5,7 @@ import { JULIA, JULIA_PERT, JULIA_FE } from './julia.js';
 import { BURNING_SHIP, SHIP_PERT, SHIP_FE } from './ship.js';
 import { MANDELBUG, BUG_PERT, BUG_FE } from './mandelbug.js';
 import { PACMAN_PERT } from './pacman.js';
+import { OCTOPUS, OCTOPUS_PERT, OCTOPUS_FE } from './octopus.js';
 
 export const SOURCES = {
   mandelbrot: MANDELBROT,
@@ -24,6 +25,9 @@ export const SOURCES = {
   bugPert: BUG_PERT,
   bugFE: BUG_FE,
   pacman: PACMAN_PERT,
+  octopus: OCTOPUS,
+  octopusPert: OCTOPUS_PERT,
+  octopusFE: OCTOPUS_FE,
 };
 
 export const SHADERS = {
@@ -34,6 +38,7 @@ export const SHADERS = {
   burningship: { float: 'ship', pert: 'shipPert', fe: 'shipFE' },
   mandelbug: { float: 'bug', pert: 'bugPert', fe: 'bugFE' },
   pacman: { pert: 'pacman', fe: 'pacman' },
+  octopus: { float: 'octopus', pert: 'octopusPert', fe: 'octopusFE' },
   custom: { float: 'custom' },
 };
 
@@ -45,6 +50,7 @@ export const COST = {
   ship: 1.2, shipPert: 2, shipFE: 7,
   bug: 1, bugPert: 1, bugFE: 5,
   pacman: 1,
+  octopus: 1.2, octopusPert: 2, octopusFE: 7,
   custom: 4,
 };
 

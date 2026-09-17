@@ -2,9 +2,9 @@
 
 **[Live demo](https://fractal-explorer-six.vercel.app/app/)**
 
-A web port of a PenguinMod project (`FractalExplorer.pmp`). Seven escape-time
+A web port of a PenguinMod project (`FractalExplorer.pmp`). Eight escape-time
 sets drawn on the GPU with WebGL2 fragment shaders, plus any number built from
-a formula you type and save to the menu. Six of them zoom without a precision limit; Pacman stops at
+a formula you type and save to the menu. Seven of them zoom without a precision limit; Pacman stops at
 2^40. The original's camera model, pen colours, and controls carry over; the
 CPU pen-plotting does not.
 
@@ -142,10 +142,10 @@ grows with depth: the iteration budget is `30 × log2 zoom`, capped at 50 000
 about 90 ms at 10^300. At 10^300 a 1280×800 frame is roughly 80 strips and
 under a second on an RTX 2060.
 
-**Webb**, **Collatz**, **Julia**, **Burning Ship** and **MandelBug** iterate
-directly in float32 up to 10^6 zoom and use the same three tiers beyond it,
-with their own reference orbits and shaders. **Pacman** is perturbed at every
-zoom, like Mandelbrot, but has only the first tier.
+**Webb**, **Collatz**, **Julia**, **Burning Ship**, **MandelBug** and **The
+Octopus** iterate directly in float32 up to 10^6 zoom and use the same three
+tiers beyond it, with their own reference orbits and shaders. **Pacman** is
+perturbed at every zoom, like Mandelbrot, but has only the first tier.
 
 Webb's two-term recurrence carries a delta on both terms,
 `d ← (2Z + d) d + e, e ← d`. The map has no critical point, so the delta never
@@ -215,6 +215,31 @@ different mouth from the old set's, which came out of `z ← z^z + c` having a
 `Re(z ln z) → −∞` half-plane; this one is an edge of the body. Past the lips the
 escape times fall into dendrites with islands of bounded orbits strewn along
 them, detached from the body and reaching `Re c ≈ 1.21`.
+
+The Octopus squares `w = (Re z + Im c) + i(|Im z| − Re c)` rather than `z`, so
+the two parts of `c` cross over. The real part of `w` takes `Im c`, and the
+imaginary part takes `−Re c` under the Burning Ship's `|·|`. The delta is a
+square's, `d ← (2W + w) w + dc`, where `w` is the delta on `W`. Its real part
+is `dr + dci`, and its imaginary part is the Burning Ship's exact
+`|Zi + di| − |Zi|` less `dcr`, so nothing cancels. `W` cannot be rebuilt from
+`Z` alone, since it holds `c` and the shader never sees `c`, so the texel
+carries it in the two channels Mandelbrot's leaves empty. `Z₀ = 0`, so the
+rebasing is Mandelbrot's unchanged, and all three tiers follow.
+
+Zoomed out the set is a straight rod at 45°, 2.50 long and 0.320 wide, running
+from a tip near `−0.26 + 0.39i` to one near `1.54 − 1.34i`. Its flanks are the
+lines `Re c + Im c = −0.1838424` and `Re c + Im c = 0.2683454`, each constant
+to seven digits along the rod. The fold is the reason. An orbit below the real
+axis has `|Im z| = −Im z`, and there `η = conj(z) − ic` iterates as
+`η ← conj(η)² + K`, the Mandelbar's map, with `K = (1 − i)(Re c + Im c)`. That
+parameter depends on `c` only through the sum of its two parts, so every `c`
+along a 45° line runs the same Mandelbar, and the escape boundary is that line.
+Inside the rod the orbit is below the axis at nearly every step. The seed
+`η₀ = −ic` keeps moving along the rod where `K` does not, and that tapers the
+two ends to points. Neither `c̄` nor a reflection across the rod repeats a
+point, so the set has no symmetry of its own. The detail is on the flanks. Off
+the lower tip, at `1.33005701471 − 1.43723164942i`, the escape times break into
+Mandelbrot-like islands that hold their shape past 2^90 zoom.
 
 **Colour** is one of seven colourways, all cycling on the original's
 100-iteration period with inside points black. Pen is the original pen
@@ -321,11 +346,12 @@ same `#saved2@` link and the same place in the menu. On a built-in set it is a
 line to start from rather than a change to the set itself. Mandelbrot stays
 Mandelbrot, and Save adds what you made beside it.
 
-Five of the seven built-in sets are written out for the editor. Mandelbrot is
+Six of the eight built-in sets are written out for the editor. Mandelbrot is
 `z^2 + c`. Julia is the same line with `z₀ = x+yi` and `c` held at
 `-0.74543+0.11301i`. Burning Ship is `(|re(z)| + i|im(z)|)^2 + conj(c)`,
-MandelBug is `re(z^2) + 2i(re(z) + im(z)) + c`, and Pacman is
-`re(z)^2 - im(z^2+c)^2 + re(c) + i*im(z^2+c)`. Any copy iterates in float32
+MandelBug is `re(z^2) + 2i(re(z) + im(z)) + c`, Pacman is
+`re(z)^2 - im(z^2+c)^2 + re(c) + i*im(z^2+c)`, and The Octopus is
+`(re(z) + im(c) + i(|im(z)| - re(c)))^2 + c`. Any copy iterates in float32
 like a typed formula, so it stops at 10⁶ zoom where the original hands over to
 a reference orbit.
 
