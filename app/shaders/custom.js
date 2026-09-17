@@ -37,7 +37,7 @@ vec2 ccosh(vec2 z) { return vec2(cosh(z.x) * cos(z.y), sinh(z.x) * sin(z.y)); }
 vec2 ctanh(vec2 z) { return cdiv(csinh(z), ccosh(z)); }
 `;
 
-export function customBody({ iter, seeds }) {
+function escapeLib({ iter, seeds }) {
   const start = seeds.map(({ name, glsl }) => `  vec2 ${name} = ${glsl};`).join('\n');
   return CUSTOM_LIB + `
 float escape(vec2 p) {
@@ -53,8 +53,26 @@ ${start}
   return 0.0;
 }
 
+vec2 pixelPoint() { return u_center + viewPixel() * u_px; }
+`;
+}
+
+export function customBody(parts) {
+  return escapeLib(parts) + `
 void main() {
-  vec2 p = u_center + viewPixel() * u_px;
-  outColor = vec4(palette(escape(p)), 1.0);
+  outColor = vec4(palette(escape(pixelPoint())), 1.0);
+}`;
+}
+
+// The same orbit in grey: how far through the iteration budget the pixel got,
+// with the points that never escape at full white. Whatever the formula, the
+// fractal is then the bright part of the picture, which is what the framing
+// survey reads back.
+export function depthBody(parts) {
+  return escapeLib(parts) + `
+void main() {
+  float e = escape(pixelPoint());
+  float depth = e > 0.0 ? min(e / float(u_maxIter), 1.0) : 1.0;
+  outColor = vec4(vec3(depth), 1.0);
 }`;
 }

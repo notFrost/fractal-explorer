@@ -3,6 +3,7 @@ import { Camera } from './precision.js';
 import { Renderer } from './gpu.js';
 import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palettes.js';
 import { parseFormula, parseSeed, formulaTokens, seedTokens, varGlsl, freeVarName, varNameError } from './formula.js';
+import { frameCustom } from './framing.js';
 import { readSaved, writeSaved, freeId, registerSet, unregisterSet } from './saved.js';
 
 // ---------- State ----------
@@ -774,7 +775,11 @@ function customLabel(parsed) {
   return parts.join('  ·  ');
 }
 
-function customHome(parsed) {
+// Where a fractal of this kind usually sits: a Julia set, whose pixel is z₀
+// under a fixed parameter, around the origin, and a parameter plane where the
+// Mandelbrot set is. The survey measures the set itself and comes back to this
+// only when it finds no extent to frame.
+function usualHome(parsed) {
   const movesWithPixel = (glsl) => glsl.includes('p.');
   const parameterMoves = movesWithPixel(parsed.seedC.glsl)
     || movesWithPixel(parsed.formula.glsl)
@@ -783,6 +788,8 @@ function customHome(parsed) {
     ? { x: 0, y: 0, zoom: 100 }
     : { x: -0.7, y: 0, zoom: 135 };
 }
+
+const customHome = (parsed, parts) => frameCustom(renderer, parts, usualHome(parsed));
 
 function writeCustomUrl(texts, parsed) {
   const url = new URL(location.href);
@@ -819,7 +826,7 @@ function applyCustom(texts) {
   committed = { texts: trimmed, parts };
   Object.assign(state, trimmed);
   SETS.custom.formula = customLabel(parsed);
-  SETS.custom.home = customHome(parsed);
+  SETS.custom.home = customHome(parsed, parts);
   writeCustomUrl(trimmed, parsed);
   return null;
 }
@@ -856,7 +863,7 @@ function updatePreview() {
   const key = [parts.iter, ...parts.seeds.map((s) => `${s.name}=${s.glsl}`), state.palette].join('|');
   if (key !== previewKey) {
     try {
-      drawPreview(parts, customHome(parsed));
+      drawPreview(parts, customHome(parsed, parts));
     } catch {
       preview.box.classList.add('stale');
       return;
@@ -1043,15 +1050,16 @@ function registerFractal(fractal) {
   } catch (err) {
     return err.message;
   }
+  const parts = shaderParts(parsed);
   try {
-    renderer.setCustom(fractal.id, shaderParts(parsed));
+    renderer.setCustom(fractal.id, parts);
   } catch {
     return 'the GPU would not compile that formula';
   }
   registerSet(fractal.id, {
     name: fractal.name,
     formula: customLabel(parsed),
-    home: customHome(parsed),
+    home: customHome(parsed, parts),
     edit: trimTexts(fractal),
   });
   return null;

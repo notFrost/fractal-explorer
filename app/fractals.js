@@ -3,6 +3,10 @@
 export const MIN_LOG_ZOOM = Math.log2(10);
 export const MAX_ITER = 100000;
 
+// The original's stage was 360 pixels tall and zoom counts stage pixels to the
+// world unit, so a view is this many world units tall whatever its size.
+export const STAGE_HEIGHT = 360;
+
 // Zoom thresholds for the precision tiers (log2).
 export const FLOAT_LOG_ZOOM = Math.log2(1e6);   // beyond this Webb and Collatz switch from direct float32 to perturbation
 export const BIG_LOG_ZOOM = 40;   // beyond this the reference orbit is computed in BigInt
