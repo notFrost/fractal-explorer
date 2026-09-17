@@ -28,49 +28,49 @@
     <p id="gpu-error" class="gpu-error" hidden></p>
 
     <ul class="cards" id="cards" aria-label="Fractal sets">
-      <li>
+      <li class="card-slot">
         <button class="card" data-set="mandelbrot" type="button">
           <canvas class="thumb" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">Mandelbrot</span>
           <span class="card-formula">z ← z² + c</span>
         </button>
       </li>
-      <li>
+      <li class="card-slot">
         <button class="card" data-set="collatz" type="button">
           <canvas class="thumb" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">Collatz</span>
           <span class="card-formula">z ← 3z + 1  or  z / 2</span>
         </button>
       </li>
-      <li>
+      <li class="card-slot">
         <button class="card" data-set="webb" type="button">
           <canvas class="thumb" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">Webb</span>
           <span class="card-formula">zₙ₊₁ ← zₙ² + zₙ₋₁</span>
         </button>
       </li>
-      <li>
+      <li class="card-slot">
         <button class="card" data-set="julia" type="button">
           <canvas class="thumb" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">Julia</span>
           <span class="card-formula">z ← z² + C</span>
         </button>
       </li>
-      <li>
+      <li class="card-slot">
         <button class="card" data-set="burningship" type="button">
           <canvas class="thumb" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">Burning Ship</span>
           <span class="card-formula">z ← (|Re&nbsp;z|&nbsp;+&nbsp;i|Im&nbsp;z|)² + c̄</span>
         </button>
       </li>
-      <li>
+      <li class="card-slot">
         <button class="card" data-set="mandelbug" type="button">
           <canvas class="thumb" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">MandelBug</span>
           <span class="card-formula">z ← Re(z²) + 2i(Re&nbsp;z&nbsp;+&nbsp;Im&nbsp;z) + c</span>
         </button>
       </li>
-      <li>
+      <li class="card-slot">
         <button class="card" data-set="pacman" type="button">
           <canvas class="thumb" width="240" height="180" aria-hidden="true"></canvas>
           <span class="card-name">Pacman</span>
@@ -91,7 +91,7 @@
 
   <main id="editor" class="page" hidden>
     <header class="page-head">
-      <h1 class="title">Create<br />Fractal</h1>
+      <h1 class="title"><span id="editor-verb">Create</span><br />Fractal</h1>
       <p class="lede">One formula, iterated until it escapes, from starting values you set. Render it once, or save it to the menu.</p>
     </header>
 

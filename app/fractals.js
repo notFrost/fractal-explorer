@@ -8,12 +8,19 @@ export const FLOAT_LOG_ZOOM = Math.log2(1e6);   // beyond this Webb and Collatz 
 export const BIG_LOG_ZOOM = 40;   // beyond this the reference orbit is computed in BigInt
 export const FE_LOG_ZOOM = 90;    // beyond this pixel deltas carry their own exponent
 
+// C is the set's parameter, not a coordinate: the pixel is z₀. Kept as the
+// strings the user typed so the URL hash round-trips them exactly.
+const JULIA_C = { re: '-0.74543', im: '0.11301' };
+
 // `home` is where a set opens from the menu, and what its card thumbnail shows.
+// `edit` is the same iteration written for the formula editor; a set that has
+// none says under `unwritable` what stops it.
 export const SETS = {
   mandelbrot: {
     name: 'Mandelbrot',
     formula: 'z ← z² + c',
     home: { x: -0.7, y: 0, zoom: 135 },
+    edit: { formula: 'Z_(n+1) = Z_(n)^2 + C', seedZ: '0', seedC: 'x+yi' },
     bookmarks: [
       { x: 0.38, y: 0.1, zoom: 40000 },
       { x: 0.297364, y: -0.019193, zoom: 41018 },
@@ -25,21 +32,22 @@ export const SETS = {
     formula: 'z ← 3z + 1  or  z / 2',
     maxIter: 500,
     home: { x: 0, y: 0, zoom: 100 },
+    unwritable: 'Collatz picks one of two formulas each step, and the editor writes one.',
     bookmarks: [],
   },
   webb: {
     name: 'Webb',
     formula: 'zₙ₊₁ ← zₙ² + zₙ₋₁',
     home: { x: 0, y: 0, zoom: 100 },
+    unwritable: 'Webb needs the term before last, and the editor carries only zₙ.',
     bookmarks: [],
   },
   julia: {
     name: 'Julia',
     formula: 'z ← z² + C',
     home: { x: 0, y: 0, zoom: 100 },
-    // C is the set's parameter, not a coordinate: the pixel is z₀. Kept as the
-    // strings the user typed so the URL hash round-trips them exactly.
-    c: { re: '-0.74543', im: '0.11301' },
+    c: JULIA_C,
+    edit: { formula: 'Z_(n+1) = Z_(n)^2 + C', seedZ: 'x+yi', seedC: `${JULIA_C.re}+${JULIA_C.im}i` },
     presets: [
       { name: "Douady's Rabbit", re: '-0.123', im: '0.745' },
       { name: 'Tree-Like Spiral', re: '-0.7', im: '0.27' },
@@ -53,6 +61,7 @@ export const SETS = {
     formula: 'z ← (|Re z| + i|Im z|)² + c̄',
     // The original opens on the small ship below the main hull.
     home: { x: -1.7561482916191014, y: 0.029730420820441892, zoom: 3194.799993706228 },
+    edit: { formula: '(|re(z)| + i|im(z)|)^2 + conj(c)', seedZ: '0', seedC: 'x+yi' },
     bookmarks: [{ x: 0, y: 0, zoom: 100 }],
   },
   mandelbug: {
@@ -61,6 +70,7 @@ export const SETS = {
     // The bulk of the set. Everything outside it is the line Im c = −Re c,
     // where c is its own fixed point, running off to infinity.
     home: { x: -0.97, y: 0.97, zoom: 157 },
+    edit: { formula: 're(z^2) + 2i(re(z) + im(z)) + c', seedZ: '0', seedC: 'x+yi' },
     bookmarks: [{ x: 0, y: 0, zoom: 100 }],
   },
   pacman: {
@@ -68,6 +78,9 @@ export const SETS = {
     formula: 'z ← zᶻ + c',
     maxLogZoom: BIG_LOG_ZOOM,
     home: { x: 1, y: 0, zoom: 96 },
+    // The editor has no 0⁰ = 1, so its copy starts on z₁ = 1 + c instead: the
+    // same orbit, one step along.
+    edit: { formula: 'z^z + c', seedZ: '1+x+yi', seedC: 'x+yi' },
     bookmarks: [],
   },
   custom: {

@@ -211,8 +211,28 @@ to the menu rather than back to the editor. The list is kept in this browser's
 local storage, so it survives a reload but does not travel with a link, and a
 `#saved2@` link only opens for the browser that saved it.
 
-The × in the corner of a saved card removes it. It puts the question over the
-card first, and Cancel or Esc backs out. Delete drops the card, its shader and
+**Edit**, in the top left of every card, opens that set in the editor with its
+formula and its two starting values already in the fields. On a fractal you
+saved, Save replaces it where it stands, under the same id, the same `#saved2@`
+link and the same place in the menu. On a built-in set it is a line to start
+from rather than a change to the set itself. Mandelbrot stays Mandelbrot, and
+Save adds what you made beside it.
+
+Five of the seven built-in sets are written out for the editor. Mandelbrot is
+`z^2 + c`. Julia is the same line with `z₀ = x+yi` and `c` held at
+`-0.74543+0.11301i`. Burning Ship is `(|re(z)| + i|im(z)|)^2 + conj(c)`,
+MandelBug is `re(z^2) + 2i(re(z) + im(z)) + c`, and Pacman is `z^z + c`. The
+editor has no `0⁰ = 1`, so Pacman's copy starts at `z₀ = 1+x+yi`, which is
+Pacman's own `z₁`. The orbit is the same, one step along. Any copy iterates in
+float32 like a typed formula, so it stops at 10⁶ zoom where the original hands
+over to a reference orbit.
+
+Collatz and Webb are greyed out, and the button says why. Collatz picks one of
+two formulas each step, and Webb needs the term before last. Neither is one
+formula in `z` and `c`.
+
+The × in the top right of a saved card removes it. It puts the question over
+the card first, and Cancel or Esc backs out. Delete drops the card, its shader and
 its stored entry. Ids count up rather than filling the gap a deletion leaves,
 so an old `#saved1@` link falls back to the menu instead of opening a
 different fractal.
