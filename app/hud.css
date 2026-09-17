@@ -72,9 +72,25 @@
 .goto[hidden],
 .julia[hidden] { display: none; }
 
-/* Julia's C: two inputs and the named parameters from the original. */
+/* Julia's C: the Mandelbrot map it is picked off, two inputs, and the named
+   parameters from the original. */
 .julia .hud-bookmarks { margin-top: 0.15rem; }
 .julia .goto-error:empty { display: none; }
+
+/* Every C is a point of the Mandelbrot plane, so that set is the picker. It
+   is square because the set is. */
+.minimap {
+  display: block;
+  width: 11rem;
+  height: 11rem;
+  justify-self: start;
+  border: 1px solid var(--line);
+  background: #000;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.minimap:hover { border-color: var(--dim); }
 
 .goto-row {
   display: grid;
@@ -102,4 +118,6 @@
 @media (max-width: 720px) {
   .hud { max-width: calc(100vw - 1.5rem); }
   .hud-c { font-size: 0.9rem; }
+  /* The HUD owns the bottom of a narrow screen, so the map is smaller there. */
+  .minimap { width: 8rem; height: 8rem; }
 }

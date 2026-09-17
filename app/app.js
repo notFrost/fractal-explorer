@@ -49,6 +49,7 @@ const goto = {
 };
 const juliaUi = {
   panel: $('#julia-panel'),
+  map: $('#julia-map'),
   re: $('#julia-re'),
   im: $('#julia-im'),
   presets: $('#julia-presets'),
@@ -364,7 +365,8 @@ function setHud(open) {
   hud.toggle.setAttribute('aria-expanded', String(open));
   hud.toggle.textContent = open ? '▾ hud' : '▸ hud';
   hud.toggle.title = open ? 'Hide the panel (H)' : 'Show the panel (H)';
-  if (!open) closeGoto();
+  if (open) paintMap();
+  else closeGoto();
 }
 
 hud.toggle.addEventListener('click', () => setHud(!hudOpen));
@@ -388,6 +390,7 @@ function showJuliaUi() {
   juliaUi.re.value = state.julia.re;
   juliaUi.im.value = state.julia.im;
   juliaUi.error.textContent = '';
+  paintMap();
 }
 
 // Applies what is in the two inputs. Bad input keeps the old C and says so.
@@ -431,6 +434,145 @@ juliaUi.presets.replaceChildren(
     return el;
   }),
 );
+
+// ---------- The Mandelbrot map Julia's C is picked off ----------
+
+// A C inside the Mandelbrot set gives a connected Julia set, a C outside gives
+// dust, and the boundary between them gives the branching ones. The map to
+// pick C off is therefore that set. A camera spans 360 / zoom down the canvas,
+// so `span` is the world height: the whole set and a margin.
+const MAP = { x: -0.75, y: 0, span: 2.7, detail: 4 };
+
+// The map resolves about 0.018 of the plane per pixel, so five decimals is
+// finer than a drag can aim and short enough to read back in the URL.
+const mapText = (v) => String(Number(v.toFixed(5)));
+
+const ACCENT = getComputedStyle(document.documentElement).getPropertyValue('--magenta').trim();
+
+let mapImage = null;
+let mapKey = '';
+
+const mapPixel = (c, w, h) => ({
+  px: w / 2 + (Number(c.re) - MAP.x) * (h / MAP.span),
+  py: h / 2 - (Number(c.im) - MAP.y) * (h / MAP.span),
+});
+
+// Where a pointer event landed, in the plane. Offsets into the drawn box
+// already leave out the border, the page scroll and the device ratio.
+function mapC(e) {
+  const map = juliaUi.map;
+  const perPx = MAP.span / map.clientHeight;
+  return {
+    re: mapText(MAP.x + (e.offsetX - map.clientWidth / 2) * perPx),
+    im: mapText(MAP.y + (map.clientHeight / 2 - e.offsetY) * perPx),
+  };
+}
+
+// The viewer's GL canvas draws the map, as it draws the menu thumbnails, and a
+// 2D canvas keeps the picture. Drawing costs a reference orbit the viewer then
+// has to compute again, so it happens on a new colourway or size. A new C
+// only moves the marker over the picture already drawn.
+function drawMapImage(w, h) {
+  const key = `${state.palette}|${w}×${h}`;
+  if (mapKey === key) return true;
+  if (!renderer) return false;
+  const cam = new Camera(MAP.x, MAP.y, 360 / MAP.span);
+  canvas.width = w;
+  canvas.height = h;
+  renderer.renderAll({ set: 'mandelbrot', cam, maxIter: iterationsFor(cam.lz, MAP.detail, 'mandelbrot') });
+  mapImage ??= document.createElement('canvas');
+  mapImage.width = w;
+  mapImage.height = h;
+  mapImage.getContext('2d').drawImage(canvas, 0, 0);
+  mapKey = key;
+  frameSeq++;
+  requestRender();
+  return true;
+}
+
+// A ring where C is. A C off the map leaves an arrowhead at the edge pointing
+// towards it, rather than a ring clamped to an edge C is not on.
+function drawMarker(ctx, w, h, dpr) {
+  const { px, py } = mapPixel(state.julia, w, h);
+  const x = Math.max(0, Math.min(w, px));
+  const y = Math.max(0, Math.min(h, py));
+  const r = 5 * dpr;
+  const path = new Path2D();
+  if (x === px && y === py) {
+    path.arc(x, y, r, 0, 2 * Math.PI);
+    for (const [ux, uy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      path.moveTo(x + ux * r * 1.7, y + uy * r * 1.7);
+      path.lineTo(x + ux * r * 3, y + uy * r * 3);
+    }
+  } else {
+    const a = Math.atan2(py - y, px - x);
+    const tip = (k, d) => [x + Math.cos(a + k) * d, y + Math.sin(a + k) * d];
+    path.moveTo(...tip(0, 0));
+    path.lineTo(...tip(2.5, r * 2.2));
+    path.lineTo(...tip(-2.5, r * 2.2));
+    path.closePath();
+  }
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 3.5 * dpr;
+  ctx.stroke(path);
+  ctx.strokeStyle = ACCENT;
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.stroke(path);
+}
+
+function paintMap() {
+  if (juliaUi.panel.hidden || !renderer) return;
+  const map = juliaUi.map;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = Math.round(map.clientWidth * dpr);
+  const h = Math.round(map.clientHeight * dpr);
+  // A folded HUD leaves the map without layout. It paints when the HUD opens.
+  if (!w || !h) return;
+  if (map.width !== w || map.height !== h) {
+    map.width = w;
+    map.height = h;
+  }
+  if (!drawMapImage(w, h)) return;
+  const ctx = map.getContext('2d');
+  ctx.drawImage(mapImage, 0, 0);
+  drawMarker(ctx, w, h, dpr);
+}
+
+let picking = false;
+
+const pickC = (e) => {
+  const c = mapC(e);
+  applyJulia(c.re, c.im);
+};
+
+juliaUi.map.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  try { juliaUi.map.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
+  juliaUi.map.focus();
+  picking = true;
+  pickC(e);
+});
+
+juliaUi.map.addEventListener('pointermove', (e) => { if (picking) pickC(e); });
+
+for (const type of ['pointerup', 'pointercancel']) {
+  juliaUi.map.addEventListener(type, () => { picking = false; });
+}
+
+// The arrows pan the view everywhere else, so the map keeps them from the
+// window and moves C by one map pixel instead.
+const NUDGE = { arrowleft: [-1, 0], arrowright: [1, 0], arrowup: [0, 1], arrowdown: [0, -1] };
+
+juliaUi.map.addEventListener('keydown', (e) => {
+  const step = NUDGE[e.key.toLowerCase()];
+  if (!step) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const d = (MAP.span / juliaUi.map.clientHeight) * (e.shiftKey ? 10 : 1);
+  applyJulia(mapText(Number(state.julia.re) + step[0] * d), mapText(Number(state.julia.im) + step[1] * d));
+});
 
 // ---------- The formula editor ----------
 
@@ -940,7 +1082,11 @@ $('#detail-down').addEventListener('click', () => changeDetail(-1));
 $('#detail-up').addEventListener('click', () => changeDetail(1));
 $('#save').addEventListener('click', savePng);
 backBtn.addEventListener('click', leaveViewer);
-window.addEventListener('resize', () => { if (mode === 'view') requestRender(); });
+window.addEventListener('resize', () => {
+  if (mode !== 'view') return;
+  paintMap();
+  requestRender();
+});
 
 // ---------- Colourways ----------
 
@@ -962,8 +1108,12 @@ function setPalette(key, { render = true } = {}) {
   else url.searchParams.set('palette', p.key);
   history.replaceState(null, '', url);
   if (!render) return;
-  if (mode === 'view') requestRender();
-  else renderCards();
+  if (mode === 'view') {
+    paintMap();
+    requestRender();
+  } else {
+    renderCards();
+  }
 }
 
 function stepPalette(dir) {
