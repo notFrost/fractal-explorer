@@ -206,15 +206,18 @@ Julia set of that constant; the view then opens on the origin rather than on
 −0.7, since a Julia set is centred there.
 
 **+ Variable**, under the pair, adds a value of your own: a letter and a
-starting value the orbit keeps for the whole run, exactly as `c` does. The
-editor takes the first free letter, and the box holding it renames it. `z`,
-`c`, `x`, `y`, `i` and `e` are spoken for, which leaves twenty on offer; a
-second variable by the same letter, or none at all, is refused rather than
-rendered. The × beside a letter drops it. `z₀` and `c` have no ×, since the
-formula and the pixel are written in terms of them. A letter joins the key
-under the formula the moment it exists, so `z² + kc` reads `k` as a variable
-once `k` is there and as an unknown name before that, and a starting value of
-`x+yi` on a variable makes it the parameter the view opens on −0.7 for.
+starting value the orbit keeps for the whole run, exactly as `c` does. It is
+written the way `z₀` and `c` are, so it takes `x` and `y` as well as numbers;
+`k = x+yi` with `c = 0` and `z ← z² + k` is the Mandelbrot set with the
+parameter carried by `k` instead, and the view opens on −0.7 for it as it
+would for `c`. The editor takes the first free letter, and the box holding it
+renames it. `z`, `c`, `x`, `y`, `i` and `e` are spoken for, which leaves
+twenty on offer; a second variable by the same letter, or none at all, is
+refused rather than rendered. The × beside a letter drops it. `z₀` and `c`
+have no ×, since the formula and the pixel are written in terms of them. A
+letter joins the key under the formula the moment it exists, so `z² + kc`
+reads `k` as a variable once `k` is there and as an unknown name before
+that.
 
 Beside the fields is a live preview of the view **Render** will open on, at
 most 640 pixels across. It redraws a quarter second after the last keystroke,

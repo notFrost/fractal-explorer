@@ -586,6 +586,7 @@ const DEFAULTS = {
   seedC: 'x+yi',
 };
 const NEW_VAR_SEED = '0';
+const VAR_SEED_HINT = 'x+yi';
 const PREVIEW_MAX_PX = 640;
 const PREVIEW_DELAY = 250;
 const NEST_COLOURS = 6;
@@ -894,7 +895,8 @@ function makeVarRow({ name, seed }) {
   value.className = 'input editor-input';
   value.spellcheck = false;
   value.autocapitalize = 'off';
-  value.placeholder = NEW_VAR_SEED;
+  value.placeholder = VAR_SEED_HINT;
+  value.setAttribute('aria-describedby', 'seed-help');
   value.value = seed;
   field.append(ink, value);
   cell.append(head, field);
