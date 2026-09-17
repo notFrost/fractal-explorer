@@ -28,7 +28,9 @@ const FUNCS = {
   sinh: 'csinh', cosh: 'ccosh', tanh: 'ctanh',
 };
 
-const names = (vars, strangers, message) => ({ vars, strangers: new Set(strangers), message });
+const names = (vars, strangers = [], message = '') => ({ vars, strangers: new Set(strangers), message });
+
+const PIXEL = { x: 'vec2(p.x, 0.0)', y: 'vec2(p.y, 0.0)' };
 
 const VAR_LETTERS = [...'abdfghjklmnopqrstuvw'];
 const SPOKEN_FOR = new Set(['z', 'c', 'x', 'y', 'i', 'e']);
@@ -36,13 +38,11 @@ const SPOKEN_FOR = new Set(['z', 'c', 'x', 'y', 'i', 'e']);
 export const varGlsl = (name) => `v_${name}`;
 
 const iteration = (extras) => names(
-  { z: 'z', c: 'c', ...Object.fromEntries(extras.map((n) => [n, varGlsl(n)])) },
-  ['x', 'y'],
-  'x and y are the point being checked, so they belong to the starting values',
+  { ...PIXEL, z: 'z', c: 'c', ...Object.fromEntries(extras.map((n) => [n, varGlsl(n)])) },
 );
 
 const seed = (extras) => names(
-  { x: 'vec2(p.x, 0.0)', y: 'vec2(p.y, 0.0)' },
+  PIXEL,
   ['z', 'c', ...extras],
   'a starting value is built from x and y, not from another variable',
 );

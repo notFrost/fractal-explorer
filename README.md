@@ -197,11 +197,11 @@ viewer comes back here rather than to the main menu.
 
 Under the line are the two values the pixel starts the orbit at, `z₀` and `c`,
 each written `real + imaginary i`. They take `x` and `y`, the real and
-imaginary parts of the point being checked, where the line itself takes `z`
-and `c`; for an `x` in the line, or a `z` in a starting value, the editor
-names the field it belongs to instead of calling it unknown. The usual pair,
-`z₀ = 0` and `c = x+yi`, is the Mandelbrot arrangement. Fix `c` at a constant
-and start `z` at the pixel instead, `z₀ = x+yi`, and the formula draws the
+imaginary parts of the point being checked, and so does the line itself, where
+`x` reads the same value on every step; for a `z` or a `c` in a starting
+value, the editor names the field it belongs to instead of calling it unknown.
+The usual pair, `z₀ = 0` and `c = x+yi`, is the Mandelbrot arrangement. Fix `c`
+at a constant and start `z` at the pixel instead, `z₀ = x+yi`, and it draws the
 Julia set of that constant; the view then opens on the origin rather than on
 −0.7, since a Julia set is centred there.
 
@@ -263,10 +263,10 @@ its stored entry. Ids count up rather than filling the gap a deletion leaves,
 so an old `#saved1@` link falls back to the menu instead of opening a
 different fractal.
 
-What it reads: `z`, `c` and any variable you have added, decimal numbers,
-`i`, `pi` and `e`; `+ - * / ^` with brackets, two values side by side for
-multiplication, letters written together as well, so `x+yi` reads as
-`x + y·i`; `abs re im conj exp log sqrt sin cos tan sinh cosh tanh`, each of
+What it reads: `z`, `c`, `x`, `y` and any variable you have added, decimal
+numbers, `i`, `pi` and `e`; `+ - * / ^` with brackets, two values side by
+side for multiplication, letters written together as well, so `x+yi` reads
+as `x + y·i`; `abs re im conj exp log sqrt sin cos tan sinh cosh tanh`, each of
 one argument; and bars for absolute value, so Burning Ship is
 `(|re(z)| + i|im(z)|)² + conj(c)`. The notation the cards use works as typed
 — superscripts, subscripts, `←`, `×`, `÷`, `−` — so `zᶻ + c` is Pacman. A
@@ -280,11 +280,11 @@ pairs inside them.
 
 The editor colours each line as you type. Brackets and bars take a colour from
 their nesting depth and the six colours cycle, so a pair matches and the pairs
-either side of it do not. `z` and `c` and the letters you have added, or `x`
-and `y` in the starting values, numbers, `i pi e`, the function names and the
-operators each have a colour of their own. The index on `zₙ₊₁` is dim, since
-the parser drops it, and a bracket or bar left open turns red, as does a name
-that belongs to a different field, such as `z` in a starting value. A layer
+either side of it do not. `z`, `c`, `x`, `y` and the letters you have added,
+numbers, `i pi e`, the function names and the operators each have a colour of
+their own. The index on `zₙ₊₁` is dim, since the parser drops it, and a bracket
+or bar left open turns red, as does a name that belongs to a different field,
+such as `z` in a starting value. A layer
 behind each field carries the colours; the field itself keeps the caret, the
 selection and the scrolling.
 The help line under a field prints each group in its colour, so it doubles as

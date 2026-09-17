@@ -645,7 +645,7 @@ function repaint() {
   for (const row of varRows) {
     paintInto(row.ink, row.seed, seedTokens(row.seed.value, extras));
   }
-  editor.known.textContent = ['z', 'c', ...extras.filter(Boolean)].join(' ');
+  editor.known.textContent = ['z', 'c', 'x', 'y', ...extras.filter(Boolean)].join(' ');
 }
 
 function editorChanged() {
@@ -714,6 +714,7 @@ function customLabel(parsed) {
 function customHome(parsed) {
   const movesWithPixel = (glsl) => glsl.includes('p.');
   const parameterMoves = movesWithPixel(parsed.seedC.glsl)
+    || movesWithPixel(parsed.formula.glsl)
     || parsed.vars.some((v) => movesWithPixel(v.seed.glsl));
   return !parameterMoves && movesWithPixel(parsed.seedZ.glsl)
     ? { x: 0, y: 0, zoom: 100 }
