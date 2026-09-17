@@ -39,7 +39,7 @@ root, so the portal reads the hash on load and forwards anything shaped like
 | --- | --- | --- |
 | Pan | W A S D or arrows, Shift doubles speed | drag |
 | Zoom | E in, Q out | wheel, pinch |
-| Rotate | Z anticlockwise, X clockwise, R levels it, Shift doubles speed | Shift and drag, two-finger twist |
+| Rotate | Z counterclockwise, X clockwise, R levels it, Shift doubles speed | Shift and drag, two-finger twist |
 | Dive into a random spot in view | F | the die button |
 | Iterations (×1 ×2 ×4 ×8) | `[` and `]` | the two round buttons |
 | Save PNG at twice screen size | Space | the camera button |
