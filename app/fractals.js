@@ -89,6 +89,17 @@ export const SETS = {
     },
     bookmarks: [],
   },
+  octopus: {
+    name: 'The Octopus',
+    formula: 'z ← (Re z + Im c + i(|Im z| − Re c))² + c',
+    home: { x: 0.61, y: -0.53, zoom: 140 },
+    edit: {
+      formula: '(re(z) + im(c) + i(|im(z)| - re(c)))^2 + c',
+      seedZ: '0',
+      seedC: 'x+yi',
+    },
+    bookmarks: [],
+  },
   custom: {
     name: 'Custom',
     formula: 'z ← z² + c',

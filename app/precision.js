@@ -551,6 +551,68 @@ export function pacmanOrbitDouble(cx, cy, maxIter, out) {
   return { len: n, escaped: false, zr, zi };
 }
 
+// The Octopus: z ← (Re z + Im c + i(|Im z| − Re c))² + c, with Z_0 = 0. The
+// square is taken of W = (Re Z + Im C, |Im Z| − Re C), which the shader cannot
+// rebuild without C, so the texel carries it: (Z, W).
+export function octopusOrbitDouble(cx, cy, maxIter, out) {
+  let zr = 0;
+  let zi = 0;
+  let wr = cy;
+  let wi = -cx;
+  out[0] = 0;
+  out[1] = 0;
+  out[2] = wr;
+  out[3] = wi;
+  let n = 1;
+  for (let i = 0; i < maxIter; i++) {
+    const nr = wr * wr - wi * wi + cx;
+    zi = 2 * wr * wi + cy;
+    zr = nr;
+    wr = zr + cy;
+    wi = Math.abs(zi) - cx;
+    out[STRIDE * n] = zr;
+    out[STRIDE * n + 1] = zi;
+    out[STRIDE * n + 2] = wr;
+    out[STRIDE * n + 3] = wi;
+    n++;
+    if (zr * zr + zi * zi > 1e10) return { len: n, escaped: true };
+  }
+  return { len: n, escaped: false, zr, zi };
+}
+
+export function octopusOrbitBig(cx, cy, bits, maxIter, out, cont = null) {
+  const B = BigInt(bits);
+  const bail = 10_000_000_000n << (2n * B);
+  const shift = bits > 60 ? BigInt(bits - 60) : 0n;
+  const div = bits > 60 ? B60 : 2 ** bits;
+  const f = (v) => Number(v >> shift) / div;
+  let zr = cont ? cont.zr : 0n;
+  let zi = cont ? cont.zi : 0n;
+  let n = cont ? cont.len : 1;
+  let wr = zr + cy;
+  let wi = (zi < 0n ? -zi : zi) - cx;
+  if (!cont) {
+    out[0] = 0;
+    out[1] = 0;
+    out[2] = f(wr);
+    out[3] = f(wi);
+  }
+  while (n < maxIter + 1) {
+    const nr = ((wr * wr - wi * wi) >> B) + cx;
+    zi = ((wr * wi) >> (B - 1n)) + cy;
+    zr = nr;
+    wr = zr + cy;
+    wi = (zi < 0n ? -zi : zi) - cx;
+    out[STRIDE * n] = f(zr);
+    out[STRIDE * n + 1] = f(zi);
+    out[STRIDE * n + 2] = f(wr);
+    out[STRIDE * n + 3] = f(wi);
+    n++;
+    if (zr * zr + zi * zi > bail) return { len: n, escaped: true };
+  }
+  return { len: n, escaped: false, zr, zi };
+}
+
 // Per-set orbit functions, texels per step, and the iteration count a budget
 // maps to (Collatz colours after two steps and gives up after 500). An orbit
 // may also report `texels` when its footprint is not len × stride, as Julia's
@@ -563,5 +625,6 @@ export const ORBITS = {
   burningship: { double: shipOrbitDouble, big: shipOrbitBig, stride: 1, iters: (n) => n },
   mandelbug: { double: bugOrbitDouble, big: bugOrbitBig, stride: 1, iters: (n) => n },
   pacman: { double: pacmanOrbitDouble, big: null, stride: 1, iters: (n) => n },
+  octopus: { double: octopusOrbitDouble, big: octopusOrbitBig, stride: 1, iters: (n) => n },
   custom: { double: null, big: null, stride: 1, iters: (n) => n },
 };
