@@ -177,6 +177,7 @@
 
   <section id="viewer" class="viewer" hidden>
     <canvas id="view" class="view"></canvas>
+    <canvas id="plane" class="plane" aria-hidden="true" hidden></canvas>
 
     <div class="topbar">
       <button id="back" class="btn" type="button" title="Back to menu (Esc)">← Menu</button>
@@ -223,6 +224,17 @@
     </aside>
 
     <div class="controls" aria-label="Controls">
+      <button id="plane-toggle" class="cbtn" type="button" title="Show the complex plane (P)"
+              aria-label="Show the complex plane" aria-pressed="false">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <g fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="3.5" y="3.5" width="17" height="17" rx="4"/>
+            <path d="M12 4.5v15M4.5 12h15"/>
+          </g>
+          <path d="M8 4.5v15M16 4.5v15M4.5 8h15M4.5 16h15" fill="none" stroke="currentColor"
+                stroke-width="1" opacity="0.45"/>
+        </svg>
+      </button>
       <button id="detail-down" class="cbtn" type="button" title="Fewer iterations ( [ )" aria-label="Fewer iterations">◔</button>
       <button id="detail-up" class="cbtn" type="button" title="More iterations ( ] )" aria-label="More iterations">●</button>
       <button id="dive" class="cbtn" type="button" title="Dive into a random spot (F)" aria-label="Dive into a random spot">
@@ -239,7 +251,7 @@
       </button>
     </div>
 
-    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · Z X turn, R levels · [ ] detail · , . colour · H folds the panel · G or paste to go somewhere · F dives somewhere new · Space saves</p>
+    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · Z X turn, R levels · [ ] detail · , . colour · P the plane · H folds the panel · G or paste to go somewhere · F dives somewhere new · Space saves</p>
   </section>
 
   <script type="module" src="app.js"></script>

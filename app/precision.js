@@ -138,15 +138,20 @@ export class Camera {
     this.y += by - this.step(sy);
   }
 
-  // Stage-pixel offset of this centre from another camera's centre, at this zoom.
-  offsetFrom(o) {
-    const dx = this.x - rescale(o.x, o.bits, this.bits);
-    const dy = this.y - rescale(o.y, o.bits, this.bits);
+  // Stage pixels for a fixed-point offset from this centre, at this zoom. The
+  // top 60 bits carry it: an offset worth drawing is a few hundred pixels.
+  toStage(d) {
     const f = Math.floor(this.lz);
     const shift = this.bits - f - 60;
-    const s = 2 ** (this.lz - f) / B60;
-    const conv = (d) => Number(shift > 0 ? d >> BigInt(shift) : d << BigInt(-shift)) * s;
-    return { x: conv(dx), y: conv(dy) };
+    return Number(shift > 0 ? d >> BigInt(shift) : d << BigInt(-shift)) * (2 ** (this.lz - f) / B60);
+  }
+
+  // Stage-pixel offset of this centre from another camera's centre, at this zoom.
+  offsetFrom(o) {
+    return {
+      x: this.toStage(this.x - rescale(o.x, o.bits, this.bits)),
+      y: this.toStage(this.y - rescale(o.y, o.bits, this.bits)),
+    };
   }
 
   xDouble() { return toDouble(this.x, this.bits); }

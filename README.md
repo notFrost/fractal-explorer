@@ -47,6 +47,7 @@ root, so the portal reads the hash on load and forwards anything shaped like
 | Go to a location | G, or paste | click the coordinate or zoom in the HUD |
 | Julia's `C` | arrows nudge it while the map has focus, Shift by ten | click or drag on the Mandelbrot map in the HUD |
 | Colourway | `,` and `.` | the chips in the HUD |
+| Show the complex plane | P | the grid button |
 | Fold the HUD away | H | the `hud` toggle under the panel |
 
 The URL hash stores the set, centre, and zoom with as many digits as the zoom
@@ -55,7 +56,22 @@ parameter: `#julia@x,y,zoom,re,im`. Its `C` has its own inputs in the HUD,
 with the original's four named parameters as chips. A colourway other than
 Pen rides along as `?palette=classic` before the hash, and the last pick is
 remembered per browser. A turned view adds `?angle=31.5`, degrees
-anticlockwise. A link without it opens level.
+anticlockwise. A link without it opens level. The complex plane adds
+`?plane=1`, and that pick too is remembered per browser.
+
+**P**, or the grid button, draws that plane over the picture: the real and
+imaginary axes, a grid, and the number each line stands for. The step is the
+1, 2 or 5 × 10^d nearest a hundred pixels, so it changes with the zoom. A
+number sits on the axis it counts along, as it would on a plotted plane. Where
+that axis has left the screen, which is most of a deep zoom, the number goes to
+the end of its own line at the edge of the frame instead, and one that would
+land on a number already written is dropped. It finds the lines in the camera's
+own fixed point rather than in a double, so a grid at 10^-40 lands on the
+digits the HUD shows and every label is exact: a whole multiple of the step
+with its point moved. Past twelve characters a number keeps only its last six
+digits, the ones that differ from line to line, since the HUD carries the
+coordinate in full. The plane draws on a second canvas over the picture, so
+switching it on costs no frame, and a saved PNG has it too.
 
 Above those inputs is the map `C` is picked off, and that map is the
 Mandelbrot set. A `C` inside it gives a connected Julia set, a `C` outside
