@@ -40,6 +40,7 @@ root, so the portal reads the hash on load and forwards anything shaped like
 | Pan | W A S D or arrows, Shift doubles speed | drag |
 | Zoom | E in, Q out | wheel, pinch |
 | Rotate | Z anticlockwise, X clockwise, R levels it, Shift doubles speed | Shift and drag, two-finger twist |
+| Dive into a random spot in view | F | the die button |
 | Iterations (×1 ×2 ×4 ×8) | `[` and `]` | the two round buttons |
 | Save PNG at twice screen size | Space | the camera button |
 | Back to the menu, or to the formula for a custom set | Esc | Menu button |
@@ -71,6 +72,32 @@ The go-to form takes the real and imaginary parts, a zoom (`1e12`, `2^1000`,
 `10^301`) and a rotation in degrees, or one pasted line in any of these shapes:
 a share link or its hash, `x, y, zoom`, or the HUD's own `x + yi @ zoom`.
 Pasting such a line anywhere in the viewer goes there directly.
+
+**F**, or the die button, drops the view into a spot picked out of the frame
+on screen: five doublings of zoom over two and a half seconds, the rate a held
+**E** zooms at. A spot picked evenly over the frame would nearly always land in
+the black of the interior or the flat wash behind the set, where a zoom ends on
+one colour, so the pick is weighted by how much the picture changes from one
+pixel to the next. Flat regions score nothing, a band of colour shifts a level
+or two, and the filaments along the boundary swing the width of the palette;
+squaring that weight leaves them the likely pick even where they cover a
+fraction of the frame. Forty spots picked this way on the Mandelbrot set as it
+opens sat on pixels whose neighbours stand 235 grey levels apart, against 6 for
+an even draw. None of the forty landed on the flat, where an even draw put 26
+of them.
+
+The frame it reads is the one already on screen, in `app/dive.js`, so the press
+costs no render, and it leaves out a tenth of the frame around the edge so the
+spot has its surroundings in view. About 40,000 pixels are scored whatever the
+size of the canvas, in one pass that keeps a running total of the weight and
+replaces the pick in proportion to it. The spot's offset across the screen runs
+down to nothing over the fall, so it drifts in a straight line to the middle
+while the view closes in on it, rather than swinging out and back. A drag, the
+wheel, a key or a bookmark stops the fall where it is, and a second press picks
+a new spot out of wherever it stopped. A set with less than half a doubling
+left under its zoom limit says so instead of moving, and one with more than
+that but less than five falls as far as it can.
+Under `prefers-reduced-motion` the view arrives without the fall.
 
 ## Rendering
 

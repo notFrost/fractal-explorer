@@ -220,6 +220,17 @@ export class Renderer {
     for (let i = 0; i < strips; i++) this.drawStrip(i, strips);
   }
 
+  // The frame on screen, RGBA bytes, rows bottom up. The context keeps its
+  // drawing buffer, so this is the last frame drawn on it, and a dive reads
+  // the picture rather than drawing one of its own.
+  framePixels() {
+    if (this.lost) return null;
+    const { width: w, height: h } = this.canvas;
+    const bytes = new Uint8Array(w * h * 4);
+    this.gl.readPixels(0, 0, w, h, this.gl.RGBA, this.gl.UNSIGNED_BYTE, bytes);
+    return { bytes, w, h };
+  }
+
   // One byte per pixel of how long that pixel's orbit lasts, for framing a
   // typed formula. It draws at the float tier, upright and in one call, on a
   // canvas sized to the survey, and reads the bytes straight back.
