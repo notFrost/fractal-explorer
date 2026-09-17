@@ -39,10 +39,10 @@
   transition: transform var(--motion);
 }
 
-/* A card carries Edit on the left, and a saved one a × and the question it
-   opens on the right. All of them sit over the card, so the slot around it is
-   the positioned box, and the wobble moves there too to carry them along. It
-   stops while the question is up. */
+/* A card carries the grip and Edit on the left, and a saved one a × and the
+   question it opens on the right. All of them sit over the card, so the slot
+   around it is the positioned box, and the wobble moves there too to carry
+   them along. It stops while the question is up. */
 .card-slot {
   --wobble-scale: 1.06;
   --wobble-tilt: 2deg;
@@ -84,6 +84,7 @@
 .card-slot.asking .card-tool { display: none; }
 
 .card-slot:hover .card-tool:not(:disabled),
+.folder-head:hover .card-tool:not(:disabled),
 .card-tool:focus-visible {
   opacity: 1;
 }
@@ -101,8 +102,20 @@
   cursor: not-allowed;
 }
 
-.card-edit {
+/* Held to drag, or tabbed to and stepped with the arrow keys. It takes the
+   pointer off the page's own scrolling so a touch drag carries the card. */
+.card-grip {
   left: 0.5rem;
+  width: 2rem;
+  color: var(--ink);
+  cursor: grab;
+  touch-action: none;
+}
+
+.card-grip:active { cursor: grabbing; }
+
+.card-edit {
+  left: 2.9rem;
   padding: 0 0.6rem;
 }
 
@@ -174,4 +187,151 @@
 @media (prefers-reduced-motion: reduce) {
   .card { transition: none; }
   .card:hover, .card:focus-visible { animation: none; transform: scale(1.03); }
+}
+
+/* ---------- Folders ---------- */
+
+/* A folder takes a row of its own across the grid: a head that names it, and
+   a grid of its own underneath. Folders hold cards, never other folders. */
+.folder {
+  grid-column: 1 / -1;
+  display: grid;
+  /* An automatic track never shrinks below what is in it, and a long formula
+     in a card would push the folder off a narrow screen. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.folder-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2rem;
+  padding-left: 2.5rem;
+}
+
+.folder-head .card-grip { top: 0; left: 0; }
+
+.folder-fold {
+  width: 1.6rem;
+  color: var(--dim);
+  transition: color var(--motion);
+}
+
+.folder-fold:hover { color: var(--magenta); }
+
+/* The name is an input the whole time; it only looks like one once you are
+   on it, so a folder reads as a heading until you go to rename it. */
+.folder-name {
+  flex: 0 1 18rem;
+  width: auto;
+  padding: 0.15rem 0.35rem;
+  font-family: var(--display);
+  font-stretch: condensed;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 1.25rem;
+  letter-spacing: 0.02em;
+  background: none;
+  border-color: transparent;
+}
+
+.folder-name:hover { border-color: var(--line); }
+.folder-name:focus { background: #000; border-color: var(--magenta); }
+
+.folder-count {
+  margin-right: auto;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.folder-remove {
+  position: static;
+  width: 2rem;
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.folder-cards {
+  align-content: start;
+  gap: 1.25rem;
+}
+
+/* An empty folder is still somewhere a card can land, so it keeps a box. */
+.folder-cards:empty::after {
+  content: "drop a fractal here";
+  grid-column: 1 / -1;
+  display: grid;
+  place-content: center;
+  min-height: 5.5rem;
+  color: var(--dim);
+  border: 1px dashed var(--line);
+}
+
+.folder-cards[hidden] { display: none; }
+
+/* ---------- Dragging ---------- */
+
+/* What follows the pointer is a copy. The slot it came from stays put, dimmed,
+   as the gap the drop will fill, and the grid reflows around it on the way. */
+.drag-ghost {
+  position: fixed;
+  z-index: 40;
+  margin: 0;
+  list-style: none;
+  pointer-events: none;
+  opacity: 0.92;
+  rotate: -1.5deg;
+  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.6));
+}
+
+.drag-ghost .card-tool,
+.drag-ghost .card-confirm { display: none; }
+
+.lifted {
+  opacity: 0.25;
+  outline: 1px dashed var(--magenta);
+  outline-offset: -1px;
+}
+
+/* Nothing wobbles while something is being carried, and the card under the
+   pointer must not grow and shove the grid about. */
+body.dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+body.dragging .card-slot:not(.drag-ghost),
+body.dragging .card {
+  transform: none;
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .folder-fold { transition: none; }
+  .drag-ghost { rotate: none; }
+}
+
+/* ---------- Menu notices ---------- */
+
+/* Where a move says where it landed, and where storage says it refused. */
+.menu-note {
+  margin: 0;
+  min-height: 1.4em;
+  color: var(--dim);
+}
+
+/* Beside Create Fractal, in the same face a size down. */
+.create-folder {
+  padding: 0.55rem 1rem;
+  font-family: var(--display);
+  font-stretch: condensed;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
 }

@@ -4,7 +4,8 @@
 
 A web port of a PenguinMod project (`FractalExplorer.pmp`). Eight escape-time
 sets drawn on the GPU with WebGL2 fragment shaders, plus any number built from
-a formula you type and save to the menu. Seven of them zoom without a precision limit; Pacman stops at
+a formula you type and save to the menu. Cards drag into any order you like,
+and into folders you name. Seven of them zoom without a precision limit; Pacman stops at
 2^40. The original's camera model, pen colours, and controls carry over; the
 CPU pen-plotting does not.
 
@@ -49,6 +50,7 @@ root, so the portal reads the hash on load and forwards anything shaped like
 | Colourway | `,` and `.` | the chips in the HUD |
 | Show the complex plane | P | the grid button |
 | Fold the HUD away | H | the `hud` toggle under the panel |
+| Move a card or folder on the menu | arrow keys, with its grip focused | drag the grip |
 
 The URL hash stores the set, centre, and zoom with as many digits as the zoom
 needs, so any view can be bookmarked or shared. Julia adds two fields for its
@@ -269,6 +271,46 @@ contour bands every eight iterations, dark on paper or pale on slate.
 the strips of one frame. `ref` is the CPU time for the reference orbit when it
 had to be recomputed.
 
+## Arranging the menu
+
+Cards start in the order the sets are built in and stay where you put them.
+Each one carries a grip in its top left, beside Edit. Hold the grip and the
+card follows the pointer, while the gap it came from stays behind with a dashed
+outline to mark where a drop lands. The grid reflows under the pointer on the
+way, so the menu shows the result before you let go. A drag held near the top
+or bottom of the window scrolls the page.
+
+The grip is a button as well. Tab to it and the arrow keys move the card one
+place in reading order. Left and up move it back, right and down move it on.
+The line under Create Fractal names the card and where it landed, for a screen
+reader as much as anything else.
+
+**New Folder**, beside Create Fractal, adds a folder. A folder takes a row of
+its own across the menu, with a grid of cards inside it. Drop a card anywhere
+on the folder to file it there, and drag it back out to the menu again.
+Built-in sets and saved ones file alike. A folder holds cards and never
+another folder, and a folder itself drags among the cards to sit where you want
+it.
+
+The name in a folder's head is a text box. Click it, type, and Enter or a click
+elsewhere keeps the new name; a blank one goes back to the old name. The arrow
+at the left folds the folder away, and the count beside the name says how many
+cards are inside. A folded folder still takes a drop, and what lands in it is
+there when you open it. The × removes the folder and keeps what was in it. The
+cards it held take the folder's own place in the menu.
+
+The arrow keys step over a folded folder rather than into it, since a card
+filed out of sight takes the keyboard focus with it. Open the folder first to
+step a card in.
+
+The arrangement is kept in this browser's local storage under `library`, beside
+the saved fractals themselves. It is a list of set ids with folders among them,
+read back each time against the sets the app has. An id the app no longer knows
+is dropped, an id filed twice keeps its first place, and a set the list does
+not mention joins the end, which covers both a built-in added by an update and
+a fractal saved in another tab. Nothing is written until you move something, so
+a browser that has never rearranged the menu opens on the built-in order.
+
 ## Your own formula
 
 **Create Fractal**, at the bottom of the menu, takes one line — `Z_(n+1) =
@@ -349,12 +391,13 @@ the preview's quarter-second wait.
 Name field. An empty field names it `Fractal 3`, counting the ones already
 saved. A saved fractal becomes a set of its own, with its shader compiled
 under an id of `saved1`, `saved2` and so on, a card and thumbnail at the end
-of the menu, and a hash of its own, `#saved2@x,y,zoom`. Its Menu button goes
+of the menu, and a hash of its own, `#saved2@x,y,zoom`. From there it drags
+and files like any other card. Its Menu button goes
 to the menu rather than back to the editor. The list is kept in this browser's
 local storage, so it survives a reload but does not travel with a link, and a
 `#saved2@` link only opens for the browser that saved it.
 
-**Edit**, in the top left of every card, opens that set in the editor with its
+**Edit**, beside the grip on every card, opens that set in the editor with its
 formula, its two starting values and any variables it carries already in the
 fields. A built-in set brings no variables, so the rows start empty. On a
 fractal you saved, Save replaces it where it stands, under the same id, the
