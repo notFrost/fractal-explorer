@@ -1,52 +1,19 @@
 export const PACMAN_PERT = `
-const float TAU = 6.2831853071795864;
-const float PI = 3.1415926535897932;
-const float EXP_MAX = 30.0;
-
-float log1p_(float x) { float u = 1.0 + x; return u == 1.0 ? x : x * log(u) / (u - 1.0); }
-float expm1_(float x) { float u = exp(x); return u == 1.0 ? x : (u - 1.0) * x / log(u); }
-
-vec2 cdiv(vec2 a, vec2 b) { return vec2(dot(a, b), a.y * b.x - a.x * b.y) / dot(b, b); }
-
-vec2 clog1p(vec2 u) {
-  return vec2(0.5 * log1p_(2.0 * u.x + u.x * u.x + u.y * u.y), atan(u.y, 1.0 + u.x));
-}
-
-vec2 cexpm1(vec2 w) {
-  float wr = min(w.x, EXP_MAX);
-  float s = sin(0.5 * w.y);
-  return vec2(expm1_(wr) * cos(w.y) - 2.0 * s * s, exp(wr) * sin(w.y));
-}
-
-float smoothPac(int n, float prev, float zz) {
-  float a = log(max(prev, 1e-20));
-  float b = log(min(zz, 1e26));
-  return float(n) + clamp((log(1e4) - a) / (b - a), 0.0, 1.0);
-}
-
 float escape(vec2 dc) {
-  vec2 d = dc;
-  int m = 1;
+  vec2 d = vec2(0.0);
+  int m = 0;
   int last = u_refLen - 1;
-  float prev = 0.0;
-  vec2 z = refAt(2).xy + d;
-  float zz = dot(z, z);
-  if (!(zz < 1e4)) return smoothPac(0, prev, zz);
-  for (int n = 1; n < u_maxIter; n++) {
-    vec4 A = refAt(2 * m);
-    vec4 B = refAt(2 * m + 1);
-    vec2 L = clog1p(cdiv(d, A.xy));
-    L.y -= TAU * floor((A.w + L.y + PI) / TAU);
-    vec2 W = cmul(A.xy, L) + cmul(d, A.zw + L);
-    d = cmul(B.xy, cexpm1(W)) + dc;
+  for (int n = 0; n < u_maxIter; n++) {
+    vec2 Z = refAt(m).xy;
     m++;
-    int i = min(m, last);
-    z = refAt(2 * i).xy + d;
-    prev = zz;
-    zz = dot(z, z);
-    if (!(zz < 1e4)) return smoothPac(n, prev, zz);
-    vec2 w = refAt(2 * i + 1).zw + d;
-    if (dot(w, w) < dot(d, d) || m >= last) { d = w; m = 1; }
+    vec2 Zn = refAt(min(m, last)).xy;
+    float di = 2.0 * (Z.x * d.y + Z.y * d.x + d.x * d.y) + dc.y;
+    float dr = d.x * (2.0 * Z.x + d.x) - di * (2.0 * Zn.y + di) + dc.x;
+    d = vec2(dr, di);
+    vec2 z = Zn + d;
+    float zz = dot(z, z);
+    if (zz > 1e4) return smoothT(n + 1, log(zz));
+    if (zz < dot(d, d) || m >= last) { d = z; m = 0; }
   }
   return 0.0;
 }

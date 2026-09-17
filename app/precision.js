@@ -531,37 +531,24 @@ export function collatzOrbitBig(cx, cy, bits, maxIter, out) {
   }
 }
 
-const PAC_EXP = 30;
-
+// Pacman: Mandelbrot with the imaginary part settled first and then read back
+// by the real one, so Zi' = 2·Zr·Zi + Ci and Zr' = Zr² − Zi'² + Cr, with
+// Z_0 = 0 as in Mandelbrot. Texel: (Z, 0, 0).
 export function pacmanOrbitDouble(cx, cy, maxIter, out) {
-  for (let k = 0; k < 2 * STRIDE; k++) out[k] = 0;
-  const z1r = 1 + cx;
-  const z1i = cy;
-  let pr = 1;
-  let pi = 0;
+  let zr = 0;
+  let zi = 0;
+  out[0] = 0;
+  out[1] = 0;
   let n = 1;
   for (let i = 0; i < maxIter; i++) {
-    const zr = pr + cx;
-    const zi = pi + cy;
-    const lr = 0.5 * Math.log(zr * zr + zi * zi);
-    const li = Math.atan2(zi, zr);
-    const m = Math.exp(Math.min(zr * lr - zi * li, PAC_EXP));
-    const wi = zr * li + zi * lr;
-    pr = m * Math.cos(wi);
-    pi = m * Math.sin(wi);
-    const o = 2 * STRIDE * n;
-    out[o] = zr;
-    out[o + 1] = zi;
-    out[o + 2] = lr;
-    out[o + 3] = li;
-    out[o + 4] = pr;
-    out[o + 5] = pi;
-    out[o + 6] = zr - z1r;
-    out[o + 7] = zi - z1i;
+    zi = 2 * zr * zi + cy;
+    zr = zr * zr - zi * zi + cx;
+    out[STRIDE * n] = zr;
+    out[STRIDE * n + 1] = zi;
     n++;
-    if (zr * zr + zi * zi > 1e4) return { len: n, escaped: true };
+    if (zr * zr + zi * zi > 1e10) return { len: n, escaped: true };
   }
-  return { len: n, escaped: false };
+  return { len: n, escaped: false, zr, zi };
 }
 
 // Per-set orbit functions, texels per step, and the iteration count a budget
@@ -575,6 +562,6 @@ export const ORBITS = {
   julia: { double: juliaOrbitDouble, big: juliaOrbitBig, stride: 2, iters: (n) => n },
   burningship: { double: shipOrbitDouble, big: shipOrbitBig, stride: 1, iters: (n) => n },
   mandelbug: { double: bugOrbitDouble, big: bugOrbitBig, stride: 1, iters: (n) => n },
-  pacman: { double: pacmanOrbitDouble, big: null, stride: 2, iters: (n) => n },
+  pacman: { double: pacmanOrbitDouble, big: null, stride: 1, iters: (n) => n },
   custom: { double: null, big: null, stride: 1, iters: (n) => n },
 };

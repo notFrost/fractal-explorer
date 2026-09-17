@@ -192,25 +192,29 @@ cancel, and `Z₀ = 0`, so its rebasing is used unchanged. The set is unbounded:
 every `c` on the line `Im c = −Re c` is its own fixed point, so the whole line
 belongs to it. The menu opens on the bulk instead, around `−0.97 + 0.97i`.
 
-Pacman iterates `z ← z^z + c`, taking `0^0` as 1, so `z₁ = 1 + c` everywhere.
-With `z^z = exp(z ln z)` on the principal branch and `L = Log1p(d/Z)`, the
-delta is `d ← Z^Z expm1(Z·L + d·(ln Z + L)) + dc`, and nothing in it cancels
-provided `log1p` and `expm1` are the real ones. Splitting the log as
-`Log Z + Log1p(d/Z)` only holds while the two sum inside `(−π, π]`, so the
-shader wraps the imaginary part of `L` to keep it there. Rebasing lands on
-index 1 rather than 0, since `ln Z₀` is undefined. The zoom stops at 2^40,
-where the other sets hand their reference to BigInt: Pacman's would need
-complex `exp` and `ln` at 1000+ bits on every step, seconds to minutes a frame.
+Pacman is Mandelbrot with the two halves of a step taken in sequence rather
+than together. The imaginary part is Mandelbrot's own, `Zi' = 2 Zr Zi + Ci`,
+and the real part then reads it back out of the step it belongs to instead of
+the step before: `Zr' = Zr² − Zi'² + Cr`. The delta follows the same order,
+`di ← 2(Zr di + Zi dr + dr di) + dci` first and
+`dr ← dr(2 Zr + dr) − di(2 Zi' + di) + dcr` after, where `Zi'` is the
+reference's next imaginary part, one texel along from the one the step began
+on. Every term is a delta against a reference value, so nothing cancels, and
+`Z₀ = 0`, so Mandelbrot's rebasing is used unchanged. The zoom stops at 2^40,
+where the other sets hand their reference to BigInt. The map is multiplication
+and addition, as MandelBug's is, so that tier would take it; the BigInt orbit
+is simply not written.
 
-The set is unbounded. Far to the left, up or down, `Re(z ln z) → −∞`, so
-`z^z → 0` and the orbit settles near `c`; only a wedge on the right escapes,
-the mouth, repeating along the imaginary axis. Crossing the bailout is not
-divergence either: orbits reach `|z| ~ 1e13` and are back near `0.5` a step
-later. That overshoot sends a fifth of the escaped plane to black under
-Mandelbrot's smooth count, so Pacman interpolates the crossing in `log|z|`
-between the last two steps, which stays in `[0, 1)`. The same violence splits
-orbits started one ulp apart to `1e-8` within about 320 steps, so where escape
-takes longer the picture is dust under any double arithmetic.
+The order is the whole difference. Conjugate symmetry survives it, `c` and `c̄`
+still drawing mirrored orbits, and on the real axis, where `Im z` starts at zero
+and stays there, the map is the real Mandelbrot, so the set meets the axis over
+the same `[−2, 0.25]`. Off the axis the body runs much further right than
+Mandelbrot's does, to `Re c ≈ 0.87` at `Im c ≈ ±0.44`, and the wedge those two
+lobes leave around the `0.25` tip is the mouth the set is named for. It is a
+different mouth from the old set's, which came out of `z ← z^z + c` having a
+`Re(z ln z) → −∞` half-plane; this one is an edge of the body. Past the lips the
+escape times fall into dendrites with islands of bounded orbits strewn along
+them, detached from the body and reaching `Re c ≈ 1.21`.
 
 **Colour** is one of seven colourways, all cycling on the original's
 100-iteration period with inside points black. Pen is the original pen
@@ -320,11 +324,10 @@ Mandelbrot, and Save adds what you made beside it.
 Five of the seven built-in sets are written out for the editor. Mandelbrot is
 `z^2 + c`. Julia is the same line with `z₀ = x+yi` and `c` held at
 `-0.74543+0.11301i`. Burning Ship is `(|re(z)| + i|im(z)|)^2 + conj(c)`,
-MandelBug is `re(z^2) + 2i(re(z) + im(z)) + c`, and Pacman is `z^z + c`. The
-editor has no `0⁰ = 1`, so Pacman's copy starts at `z₀ = 1+x+yi`, which is
-Pacman's own `z₁`. The orbit is the same, one step along. Any copy iterates in
-float32 like a typed formula, so it stops at 10⁶ zoom where the original hands
-over to a reference orbit.
+MandelBug is `re(z^2) + 2i(re(z) + im(z)) + c`, and Pacman is
+`re(z)^2 - im(z^2+c)^2 + re(c) + i*im(z^2+c)`. Any copy iterates in float32
+like a typed formula, so it stops at 10⁶ zoom where the original hands over to
+a reference orbit.
 
 Collatz and Webb are greyed out, and the button says why. Collatz picks one of
 two formulas each step, and Webb needs the term before last. Neither is one
@@ -342,9 +345,10 @@ side for multiplication, letters written together as well, so `x+yi` reads
 as `x + y·i`; `abs re im conj exp log sqrt sin cos tan sinh cosh tanh`, each of
 one argument; and bars for absolute value, so Burning Ship is
 `(|re(z)| + i|im(z)|)² + conj(c)`. The notation the cards use works as typed
-— superscripts, subscripts, `←`, `×`, `÷`, `−` — so `zᶻ + c` is Pacman. A
-whole-number exponent squares and multiplies rather than going through `exp`
-and `log`, which is faster and, unlike the log, defined at `z = 0`.
+— superscripts, subscripts, `←`, `×`, `÷`, `−` — so the card line
+`z ← z² + c` goes straight into the field. A whole-number exponent squares and
+multiplies rather than going through `exp` and `log`, which is faster and,
+unlike the log, defined at `z = 0`.
 
 The same character has to open and close the pair, so a bar opens where a
 value is due and closes where one has just ended. `||z| + |c||` and `2|z|`
