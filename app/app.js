@@ -11,6 +11,8 @@ const state = {
   set: 'mandelbrot',
   cam: new Camera(0, 0, 100),
   detail: 1,
+  // Degrees the view is turned anticlockwise. Rides in the URL as ?angle=.
+  angle: 0,
   // Julia's parameter, kept as the strings the user typed so the hash
   // round-trips them exactly.
   julia: { ...SETS.julia.c },
@@ -35,6 +37,7 @@ const hud = {
   palettes: $('#palettes'),
   c: $('#hud-c'),
   zoom: $('#hud-zoom'),
+  angle: $('#hud-angle'),
   iter: $('#hud-iter'),
   detail: $('#hud-detail'),
   status: $('#hud-status'),
@@ -45,6 +48,7 @@ const goto = {
   x: $('#goto-x'),
   y: $('#goto-y'),
   zoom: $('#goto-zoom'),
+  rot: $('#goto-rot'),
   any: $('#goto-any'),
   error: $('#goto-error'),
 };
@@ -90,8 +94,9 @@ try {
 
 const iterNow = () => iterationsFor(state.cam.lz, state.detail, state.set);
 
-// Everything a frame needs: which set, where, how hard, and Julia's C.
-const viewNow = (maxIter = iterNow()) => ({ set: state.set, cam: state.cam, maxIter, julia: state.julia });
+// Everything a frame needs: which set, where, how hard, and Julia's C. The
+// thumbnails and the Julia map pass no angle and stay upright.
+const viewNow = (maxIter = iterNow()) => ({ set: state.set, cam: state.cam, maxIter, julia: state.julia, angle: radians(state.angle) });
 
 // C as text, both for the URL and for the label above the HUD.
 const juliaText = (c) => `${c.re} ${String(c.im).startsWith('-') ? '−' : '+'} ${String(c.im).replace(/^[-+]/, '')}i`;
@@ -118,6 +123,35 @@ function clampLogZoom(lz, set = state.set) {
   return Math.min(SETS[set].maxLogZoom ?? Infinity, Math.max(MIN_LOG_ZOOM, lz));
 }
 
+// ---------- Turning the view ----------
+//
+// The angle is degrees anticlockwise, and only the screen turns. The centre,
+// the reference orbit and the precision tiers are unchanged. The shader reads
+// a pixel's offset along the plane's axes, so a move made in screen pixels
+// passes through worldDelta on its way to the camera.
+
+const DEGREE = Math.PI / 180;
+const radians = (deg) => deg * DEGREE;
+const normalisedAngle = (deg) => ((deg % 360) + 360) % 360;
+const angleText = (deg) => String(Number(deg.toFixed(3)));
+
+function setAngle(deg) {
+  state.angle = normalisedAngle(deg);
+  requestRender();
+}
+
+function worldDelta(sx, sy) {
+  const c = Math.cos(radians(state.angle));
+  const s = Math.sin(radians(state.angle));
+  return { x: sx * c + sy * s, y: sy * c - sx * s };
+}
+
+// Stage pixels across the screen, turned onto the plane's axes for the camera.
+function panBy(sx, sy) {
+  const d = worldDelta(sx, sy);
+  state.cam.pan(d.x, d.y);
+}
+
 // Deep zooms resolve hundreds of digits; the HUD shows the first 40 and keeps
 // the full value in the tooltip and the URL.
 function hudCoord() {
@@ -133,6 +167,7 @@ function updateHud() {
   hud.c.textContent = hudCoord();
   hud.c.title = state.cam.lz < 40 ? 'Edit the coordinate (G)' : `${state.cam.xString()}\n${state.cam.yString()}`;
   hud.zoom.textContent = fmtZoom(state.cam.lz);
+  hud.angle.textContent = `${Number(state.angle.toFixed(1))}°`;
   hud.iter.textContent = String(iterNow());
   hud.detail.textContent = String(state.detail);
 }
@@ -146,7 +181,11 @@ function scheduleHash() {
     const c = state.cam;
     // Julia carries its parameter in two extra fields: #julia@x,y,zoom,re,im
     const j = state.set === 'julia' ? `,${state.julia.re},${state.julia.im}` : '';
-    history.replaceState(null, '', `#${state.set}@${c.xString()},${c.yString()},${c.zoomString()}${j}`);
+    const url = new URL(location.href);
+    if (state.angle) url.searchParams.set('angle', angleText(state.angle));
+    else url.searchParams.delete('angle');
+    url.hash = `${state.set}@${c.xString()},${c.yString()},${c.zoomString()}${j}`;
+    history.replaceState(null, '', url);
   }, 300);
 }
 
@@ -252,7 +291,8 @@ function savePng() {
   const c = state.cam;
   const j = state.set === 'julia' ? `_C${state.julia.re}_${state.julia.im}i` : '';
   const pal = state.palette === DEFAULT_PALETTE ? '' : `_${state.palette}`;
-  const name = `${state.set}${j}_${c.xString().slice(0, 24)}_${c.yString().slice(0, 24)}_${c.zoomString()}x${pal}.png`;
+  const rot = state.angle ? `_rot${angleText(state.angle)}` : '';
+  const name = `${state.set}${j}_${c.xString().slice(0, 24)}_${c.yString().slice(0, 24)}_${c.zoomString()}x${rot}${pal}.png`;
   canvas.toBlob((blob) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -280,6 +320,13 @@ function parseZoom(str) {
   return z > 0 ? Math.log2(z) : NaN;
 }
 
+function parseAngle(str) {
+  const s = String(str).trim().replace(/[°º]$/, '').trim();
+  if (!s) return 0;
+  const deg = Number(s.replace(/[−–]/g, '-'));
+  return Number.isFinite(deg) ? deg : NaN;
+}
+
 const NUM = String.raw`[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?`;
 const COMPLEX = new RegExp(`^(${NUM})\\s*([-+])\\s*(${NUM})\\s*i(?:\\s*@\\s*(.+))?$`, 'i');
 
@@ -297,7 +344,16 @@ function parseLocation(text) {
   let m = linkPattern().exec(t);
   if (m) {
     const pal = /[?&]palette=(\w+)/i.exec(t);
-    return { set: m[1].toLowerCase(), xs: m[2], ys: m[3], lz: parseZoom(m[4]), c: readC(m[5], m[6]), palette: pal?.[1] };
+    const rot = /[?&]angle=(-?[\d.]+)/i.exec(t);
+    return {
+      set: m[1].toLowerCase(),
+      xs: m[2],
+      ys: m[3],
+      lz: parseZoom(m[4]),
+      c: readC(m[5], m[6]),
+      palette: pal?.[1],
+      angle: rot ? Number(rot[1]) : 0,
+    };
   }
   m = COMPLEX.exec(t);
   if (m) return { xs: m[1], ys: m[2] + m[3].replace(/^[-+]/, ''), lz: m[4] ? parseZoom(m[4]) : undefined };
@@ -312,6 +368,8 @@ function parseLocation(text) {
 function goTo(loc) {
   const lz = loc.lz === undefined ? state.cam.lz : loc.lz;
   if (!Number.isFinite(lz)) return 'could not read the zoom';
+  const angle = loc.angle === undefined ? state.angle : loc.angle;
+  if (!Number.isFinite(angle)) return 'could not read the rotation';
   const cam = Camera.fromDecimal(loc.xs, loc.ys, clampLogZoom(lz, loc.set));
   if (!cam) return 'could not read the coordinate';
   if (loc.c) state.julia = loc.c;
@@ -319,6 +377,7 @@ function goTo(loc) {
   if (loc.palette && paletteByKey(loc.palette)) setPalette(loc.palette, { render: false });
   if (loc.set && loc.set !== state.set) showViewer(loc.set);
   else showJuliaUi();
+  state.angle = normalisedAngle(angle);
   state.cam = cam;
   requestRender();
   return null;
@@ -332,6 +391,7 @@ function openGoto() {
   goto.x.value = c.xString();
   goto.y.value = c.yString();
   goto.zoom.value = c.zoomString();
+  goto.rot.value = angleText(state.angle);
   goto.any.value = '';
   goto.error.textContent = '';
   goto.form.hidden = false;
@@ -346,7 +406,9 @@ function closeGoto() {
 goto.form.addEventListener('submit', (e) => {
   e.preventDefault();
   const any = goto.any.value.trim();
-  const loc = any ? parseLocation(any) : { xs: goto.x.value, ys: goto.y.value, lz: parseZoom(goto.zoom.value) };
+  const loc = any
+    ? parseLocation(any)
+    : { xs: goto.x.value, ys: goto.y.value, lz: parseZoom(goto.zoom.value), angle: parseAngle(goto.rot.value) };
   const err = loc ? goTo(loc) : 'could not read that';
   if (err) {
     goto.error.textContent = err;
@@ -357,6 +419,7 @@ goto.form.addEventListener('submit', (e) => {
 $('#goto-cancel').addEventListener('click', closeGoto);
 hud.c.addEventListener('click', openGoto);
 hud.zoom.addEventListener('click', openGoto);
+hud.angle.addEventListener('click', openGoto);
 
 // ---------- Folding the HUD away ----------
 
@@ -1089,7 +1152,14 @@ function tick(now) {
   if (keys.has('d') || keys.has('arrowright')) dx += pan;
   if (keys.has('w') || keys.has('arrowup')) dy += pan;
   if (keys.has('s') || keys.has('arrowdown')) dy -= pan;
-  if (dx || dy) { state.cam.pan(dx, dy); moved = true; }
+  if (dx || dy) { panBy(dx, dy); moved = true; }
+
+  // A quarter turn a second, a half with Shift.
+  const spin = 90 * fast * dt;
+  let turn = 0;
+  if (keys.has('z')) turn += spin;
+  if (keys.has('x')) turn -= spin;
+  if (turn) { state.angle = normalisedAngle(state.angle + turn); moved = true; }
 
   const dlz = 2 * dt; // 4× per second
   if (keys.has('e')) { state.cam.setLogZoom(clampLogZoom(state.cam.lz + dlz)); moved = true; }
@@ -1101,8 +1171,9 @@ function tick(now) {
 
 // ---------- Keyboard ----------
 
-const movementKeys = new Set(['a', 'd', 'w', 's', 'q', 'e', 'shift', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown']);
+const movementKeys = new Set(['a', 'd', 'w', 's', 'q', 'e', 'z', 'x', 'shift', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown']);
 const STEP_LZ = Math.log2(1.2);
+const STEP_TURN = 5;
 
 window.addEventListener('keydown', (e) => {
   if (mode === 'editor') {
@@ -1114,6 +1185,7 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeGoto();
     return;
   }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
   const k = e.key.toLowerCase();
   if (movementKeys.has(k)) {
     e.preventDefault();
@@ -1122,16 +1194,18 @@ window.addEventListener('keydown', (e) => {
     startMotion();
     // One discrete step on the tap; holding continues in tick().
     const pan = 10 * (e.shiftKey ? 2 : 1);
-    if (k === 'a' || k === 'arrowleft') state.cam.pan(-pan, 0);
-    if (k === 'd' || k === 'arrowright') state.cam.pan(pan, 0);
-    if (k === 'w' || k === 'arrowup') state.cam.pan(0, pan);
-    if (k === 's' || k === 'arrowdown') state.cam.pan(0, -pan);
+    if (k === 'a' || k === 'arrowleft') panBy(-pan, 0);
+    if (k === 'd' || k === 'arrowright') panBy(pan, 0);
+    if (k === 'w' || k === 'arrowup') panBy(0, pan);
+    if (k === 's' || k === 'arrowdown') panBy(0, -pan);
     if (k === 'e') state.cam.setLogZoom(clampLogZoom(state.cam.lz + STEP_LZ));
     if (k === 'q') state.cam.setLogZoom(clampLogZoom(state.cam.lz - STEP_LZ));
+    const turn = STEP_TURN * (e.shiftKey ? 2 : 1);
+    if (k === 'z') state.angle = normalisedAngle(state.angle + turn);
+    if (k === 'x') state.angle = normalisedAngle(state.angle - turn);
     requestRender();
     return;
   }
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (k === ' ') { e.preventDefault(); savePng(); }
   if (k === 'escape') (goto.form.hidden ? leaveViewer : closeGoto)();
   if (k === '[') changeDetail(-1);
@@ -1139,6 +1213,7 @@ window.addEventListener('keydown', (e) => {
   if (k === ',') stepPalette(-1);
   if (k === '.') stepPalette(1);
   if (k === 'h') setHud(!hudOpen);
+  if (k === 'r') setAngle(0);
   if (k === 'g') { e.preventDefault(); openGoto(); }
 });
 
@@ -1167,9 +1242,25 @@ function stageOffset(px, py) {
 // Zoom keeping the world point under (px, py) fixed.
 function zoomAt(px, py, factor) {
   const { sx, sy } = stageOffset(px, py);
+  const d = worldDelta(sx, sy);
   const target = clampLogZoom(state.cam.lz + Math.log2(factor));
-  state.cam.zoomAt(sx, sy, target - state.cam.lz);
+  state.cam.zoomAt(d.x, d.y, target - state.cam.lz);
   requestRender();
+}
+
+// The angle of a client point about the centre of the canvas, anticlockwise.
+// The centre itself has no bearing, so a turn that starts there waits until
+// the pointer is clear of it.
+function screenBearing(px, py) {
+  const { sx, sy } = stageOffset(px, py);
+  return Math.hypot(sx, sy) < 4 ? null : Math.atan2(sy, sx) / DEGREE;
+}
+
+// Bearings meet at half a turn. The jump across that seam is a whole turn,
+// which normalisedAngle takes back out.
+function turnBy(from, to) {
+  if (from === null || to === null) return;
+  setAngle(state.angle + to - from);
 }
 
 canvas.addEventListener('wheel', (e) => {
@@ -1180,13 +1271,16 @@ canvas.addEventListener('wheel', (e) => {
 const pointers = new Map();
 let pinch = null;
 
+// The bearing from one finger to the other, anticlockwise on screen.
+const fingerBearing = (a, b) => Math.atan2(a.y - b.y, b.x - a.x) / DEGREE;
+
 canvas.addEventListener('pointerdown', (e) => {
   try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   canvas.classList.add('dragging');
   if (pointers.size === 2) {
     const [a, b] = [...pointers.values()];
-    pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y) };
+    pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), bearing: fingerBearing(a, b) };
   }
 });
 
@@ -1196,8 +1290,12 @@ canvas.addEventListener('pointermove', (e) => {
   const dpr = canvas.width / canvas.clientWidth;
   const scale = canvas.height / 360;
   if (pointers.size === 1) {
-    state.cam.pan(-((e.clientX - p.x) * dpr) / scale, ((e.clientY - p.y) * dpr) / scale);
-    requestRender();
+    // Shift turns the view instead, sweeping it about the centre.
+    if (e.shiftKey) turnBy(screenBearing(p.x, p.y), screenBearing(e.clientX, e.clientY));
+    else {
+      panBy(-((e.clientX - p.x) * dpr) / scale, ((e.clientY - p.y) * dpr) / scale);
+      requestRender();
+    }
   }
   p.x = e.clientX;
   p.y = e.clientY;
@@ -1205,7 +1303,10 @@ canvas.addEventListener('pointermove', (e) => {
     const [a, b] = [...pointers.values()];
     const d = Math.hypot(a.x - b.x, a.y - b.y);
     if (d > 0 && pinch.dist > 0) zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, d / pinch.dist);
+    const bearing = fingerBearing(a, b);
+    if (d > 0) turnBy(pinch.bearing, bearing);
     pinch.dist = d;
+    pinch.bearing = bearing;
   }
 });
 
@@ -1271,6 +1372,12 @@ function initialPalette() {
     if (stored && paletteByKey(stored)) return stored;
   } catch { /* private mode */ }
   return DEFAULT_PALETTE;
+}
+
+// The link's angle, or level.
+function initialAngle() {
+  const deg = parseAngle(new URLSearchParams(location.search).get('angle') ?? '');
+  return Number.isFinite(deg) ? normalisedAngle(deg) : 0;
 }
 
 hud.palettes.replaceChildren(
@@ -1483,6 +1590,7 @@ cards.addEventListener('click', (e) => {
   const card = e.target.closest('.card');
   if (!card) return;
   state.julia = { ...SETS.julia.c };
+  state.angle = 0;
   showViewer(card.dataset.set, homeView(card.dataset.set));
 });
 
@@ -1491,6 +1599,7 @@ cards.addEventListener('click', (e) => {
 window.__fx = { state, showViewer, showMenu, showEditor, editFractal, renderCards, render, renderer, iterationsFor, updatePreview, Camera, parseLocation, parseZoom, goTo, applyJulia, applyCustom, setPalette, savedFractals };
 
 setPalette(initialPalette(), { render: false });
+state.angle = initialAngle();
 
 for (const card of cards.querySelectorAll('.card')) card.after(editControl(card.dataset.set));
 

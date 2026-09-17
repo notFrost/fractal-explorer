@@ -52,6 +52,6 @@ float escape(vec2 dc) {
 }
 
 void main() {
-  vec2 dc = (gl_FragCoord.xy - 0.5 * u_res + u_offset) * u_px;
+  vec2 dc = (viewPixel() + u_offset) * u_px;
   outColor = vec4(palette(escape(dc)), 1.0);
 }`;

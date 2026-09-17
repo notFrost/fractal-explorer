@@ -181,6 +181,7 @@
       <div id="hud-body" class="hud-body" aria-live="polite">
         <div class="hud-row hud-c"><span class="hud-k">c</span> <button id="hud-c" class="hud-edit" type="button" title="Edit the coordinate (G)">0 + 0i</button></div>
         <div class="hud-row"><span class="hud-k">zoom</span> <button id="hud-zoom" class="hud-edit" type="button" title="Edit the zoom (G)">100×</button></div>
+        <div class="hud-row"><span class="hud-k">rot</span> <button id="hud-angle" class="hud-edit" type="button" title="Edit the rotation (G). Z and X turn it, R levels it">0°</button></div>
         <div class="hud-row"><span class="hud-k">iter</span> <span id="hud-iter">200</span> <span class="hud-dim">detail ×<span id="hud-detail">1</span></span></div>
         <div class="hud-row hud-dim"><span id="hud-status">idle</span></div>
         <div id="palettes" class="hud-row palette-groups" aria-label="Colourway"></div>
@@ -201,6 +202,7 @@
           <label class="goto-row"><span class="hud-k">re</span><input id="goto-x" class="input" type="text" spellcheck="false" /></label>
           <label class="goto-row"><span class="hud-k">im</span><input id="goto-y" class="input" type="text" spellcheck="false" /></label>
           <label class="goto-row"><span class="hud-k">zoom</span><input id="goto-zoom" class="input" type="text" spellcheck="false" placeholder="1e12, 2^1000, 10^301" /></label>
+          <label class="goto-row"><span class="hud-k">rot</span><input id="goto-rot" class="input" type="text" spellcheck="false" placeholder="degrees anticlockwise" /></label>
           <label class="goto-row"><span class="hud-k">any</span><input id="goto-any" class="input" type="text" spellcheck="false" placeholder="paste a link, “x, y, zoom” or “x + yi @ zoom”" /></label>
           <div class="goto-actions">
             <button type="submit" class="btn btn-accent">Go</button>
@@ -221,7 +223,7 @@
       </button>
     </div>
 
-    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · [ ] detail · , . colour · H folds the panel · G or paste to go somewhere · Space saves</p>
+    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · Z X turn, R levels · [ ] detail · , . colour · H folds the panel · G or paste to go somewhere · Space saves</p>
   </section>
 
   <script type="module" src="app.js"></script>

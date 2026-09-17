@@ -39,6 +39,7 @@ root, so the portal reads the hash on load and forwards anything shaped like
 | --- | --- | --- |
 | Pan | W A S D or arrows, Shift doubles speed | drag |
 | Zoom | E in, Q out | wheel, pinch |
+| Rotate | Z anticlockwise, X clockwise, R levels it, Shift doubles speed | Shift and drag, two-finger twist |
 | Iterations (×1 ×2 ×4 ×8) | `[` and `]` | the two round buttons |
 | Save PNG at twice screen size | Space | the camera button |
 | Back to the menu, or to the formula for a custom set | Esc | Menu button |
@@ -52,7 +53,8 @@ needs, so any view can be bookmarked or shared. Julia adds two fields for its
 parameter: `#julia@x,y,zoom,re,im`. Its `C` has its own inputs in the HUD,
 with the original's four named parameters as chips. A colourway other than
 Pen rides along as `?palette=classic` before the hash, and the last pick is
-remembered per browser.
+remembered per browser. A turned view adds `?angle=31.5`, degrees
+anticlockwise. A link without it opens level.
 
 Above those inputs is the map `C` is picked off, and that map is the
 Mandelbrot set. A `C` inside it gives a connected Julia set, a `C` outside
@@ -65,10 +67,10 @@ pointing towards it. The map draws on the same GL canvas as the menu
 thumbnails, and only for a new colourway or size, so moving `C` redraws the
 Julia view alone.
 
-The go-to form takes the real and imaginary parts and a zoom (`1e12`,
-`2^1000`, `10^301`), or one pasted line in any of these shapes: a share link
-or its hash, `x, y, zoom`, or the HUD's own `x + yi @ zoom`. Pasting such a
-line anywhere in the viewer goes there directly.
+The go-to form takes the real and imaginary parts, a zoom (`1e12`, `2^1000`,
+`10^301`) and a rotation in degrees, or one pasted line in any of these shapes:
+a share link or its hash, `x, y, zoom`, or the HUD's own `x + yi @ zoom`.
+Pasting such a line anywhere in the viewer goes there directly.
 
 ## Rendering
 
@@ -76,6 +78,14 @@ One fullscreen triangle, one fragment shader per set. Cheap frames are a
 single draw call. Expensive frames are drawn in horizontal strips across
 successive animation frames so no draw call runs long enough to trip the GPU
 watchdog. Every input event starts a new frame and cancels the old one.
+
+Rotation happens where a pixel becomes a complex number. Each shader takes the
+pixel's offset from the centre of the screen, turns it onto the plane's axes,
+then scales it by the pixel size. The camera centre, the reference orbit and
+the precision tiers are untouched. Panning and zooming take the same turn on
+the way from the screen to the camera, so a drag follows the hand and W moves
+up the screen at any angle. The Julia map and the menu thumbnails are drawn
+without an angle and stay upright.
 
 ### Mandelbrot precision tiers
 
