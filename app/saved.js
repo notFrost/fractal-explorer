@@ -4,8 +4,12 @@ import { ORBITS } from './precision.js';
 
 const STORE = 'saved-fractals';
 
+const readableVar = (v) => v && typeof v === 'object'
+  && typeof v.name === 'string' && typeof v.seed === 'string';
+
 const readable = (f) => f && typeof f === 'object'
-  && typeof f.id === 'string' && typeof f.name === 'string' && typeof f.formula === 'string';
+  && typeof f.id === 'string' && typeof f.name === 'string' && typeof f.formula === 'string'
+  && (f.vars === undefined || (Array.isArray(f.vars) && f.vars.every(readableVar)));
 
 export function readSaved() {
   try {

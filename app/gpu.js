@@ -9,7 +9,7 @@ const REF_W = 1024;
 
 const STRIP_BUDGET = 2e9;
 
-const customKey = (parts) => (parts ? `${parts.iter}|${parts.seedZ}|${parts.seedC}` : null);
+const customKey = (parts) => (parts ? [parts.iter, ...parts.seeds.map((s) => `${s.name}=${s.glsl}`)].join('|') : null);
 
 function compile(gl, type, src) {
   const s = gl.createShader(type);

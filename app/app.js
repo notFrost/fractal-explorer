@@ -2,7 +2,7 @@ import { SETS, MIN_LOG_ZOOM, iterationsFor } from './fractals.js';
 import { Camera } from './precision.js';
 import { Renderer } from './gpu.js';
 import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palettes.js';
-import { parseFormula, parseSeed, formulaTokens, seedTokens } from './formula.js';
+import { parseFormula, parseSeed, formulaTokens, seedTokens, varGlsl, freeVarName, varNameError } from './formula.js';
 import { readSaved, writeSaved, freeId, registerSet, unregisterSet } from './saved.js';
 
 // ---------- State ----------
@@ -20,6 +20,7 @@ const state = {
   formula: '',
   seedZ: '',
   seedC: '',
+  vars: [],
 };
 
 const $ = (s) => document.querySelector(s);
@@ -66,6 +67,9 @@ const editor = {
   saveHelp: $('#save-help'),
   input: { formula: $('#formula'), seedZ: $('#seed-z'), seedC: $('#seed-c') },
   ink: { formula: $('#formula-ink'), seedZ: $('#seed-z-ink'), seedC: $('#seed-c-ink') },
+  seeds: $('#editor-seeds'),
+  addVar: $('#add-var'),
+  known: $('#formula-vars'),
 };
 const preview = {
   box: $('#preview'),
@@ -581,6 +585,8 @@ const DEFAULTS = {
   seedZ: '0',
   seedC: 'x+yi',
 };
+const NEW_VAR_SEED = '0';
+const VAR_SEED_HINT = 'x+yi';
 const PREVIEW_MAX_PX = 640;
 const PREVIEW_DELAY = 250;
 const NEST_COLOURS = 6;
@@ -603,6 +609,8 @@ let opensWith = null;
 
 const overwrites = () => (SETS[openedFrom]?.custom ? openedFrom : null);
 
+const varRows = [];
+
 const TOKEN_CLASS = {
   var: 'tok-var',
   num: 'tok-num',
@@ -614,10 +622,8 @@ const TOKEN_CLASS = {
   bad: 'tok-bad',
 };
 
-function paintField(field) {
-  const input = editor.input[field.key];
-  const ink = editor.ink[field.key];
-  ink.replaceChildren(...field.tokens(input.value).map((tok) => {
+function paintInto(ink, input, tokens) {
+  ink.replaceChildren(...tokens.map((tok) => {
     const span = document.createElement('span');
     span.className = tok.depth === undefined
       ? TOKEN_CLASS[tok.kind] ?? ''
@@ -628,15 +634,56 @@ function paintField(field) {
   ink.scrollLeft = input.scrollLeft;
 }
 
-const editorTexts = () => Object.fromEntries(FIELDS.map((f) => [f.key, editor.input[f.key].value]));
+const varNames = () => varRows.map((row) => row.name.value.trim().toLowerCase());
+
+function repaint() {
+  const extras = varNames();
+  for (const f of FIELDS) {
+    const input = editor.input[f.key];
+    paintInto(editor.ink[f.key], input, f.tokens(input.value, extras));
+  }
+  for (const row of varRows) {
+    paintInto(row.ink, row.seed, seedTokens(row.seed.value, extras));
+  }
+  editor.known.textContent = ['z', 'c', 'x', 'y', ...extras.filter(Boolean)].join(' ');
+}
+
+function editorChanged() {
+  editor.error.textContent = '';
+  repaint();
+  schedulePreview();
+}
+
+const editorTexts = () => ({
+  ...Object.fromEntries(FIELDS.map((f) => [f.key, editor.input[f.key].value])),
+  vars: varRows.map((row) => ({ name: row.name.value, seed: row.seed.value })),
+});
+
+const readVars = (texts) => (Array.isArray(texts.vars) ? texts.vars : []).map((v) => ({
+  name: String(v.name ?? '').trim().toLowerCase(),
+  seed: String(v.seed ?? '').trim(),
+}));
 
 function parseCustom(texts) {
-  const parsed = {};
+  const vars = readVars(texts);
+  const names = vars.map((v) => v.name);
+  for (const [at, v] of vars.entries()) {
+    const err = varNameError(v.name, names.filter((_, other) => other !== at));
+    if (err) throw new Error(`variables: ${err}`);
+  }
+  const parsed = { vars: [] };
   for (const f of FIELDS) {
     try {
-      parsed[f.key] = f.parse(String(texts[f.key] ?? '').trim());
+      parsed[f.key] = f.parse(String(texts[f.key] ?? '').trim(), names);
     } catch (err) {
       throw new Error(`${f.label}: ${err.message}`);
+    }
+  }
+  for (const v of vars) {
+    try {
+      parsed.vars.push({ name: v.name, seed: parseSeed(v.seed, names) });
+    } catch (err) {
+      throw new Error(`${v.name}: ${err.message}`);
     }
   }
   return parsed;
@@ -644,8 +691,11 @@ function parseCustom(texts) {
 
 const shaderParts = (parsed) => ({
   iter: parsed.formula.glsl,
-  seedZ: parsed.seedZ.glsl,
-  seedC: parsed.seedC.glsl,
+  seeds: [
+    ...parsed.vars.map((v) => ({ name: varGlsl(v.name), glsl: v.seed.glsl })),
+    { name: 'c', glsl: parsed.seedC.glsl },
+    { name: 'z', glsl: parsed.seedZ.glsl },
+  ],
 });
 
 const DEFAULT_GLSL = Object.fromEntries(FIELDS.map((f) => [f.key, f.parse(DEFAULTS[f.key]).glsl]));
@@ -657,12 +707,16 @@ function customLabel(parsed) {
   for (const f of SEED_FIELDS) {
     if (!usual(parsed, f)) parts.push(`${f.label} = ${parsed[f.key].text}`);
   }
+  for (const v of parsed.vars) parts.push(`${v.name} = ${v.seed.text}`);
   return parts.join('  ·  ');
 }
 
 function customHome(parsed) {
-  const movesWithPixel = (key) => parsed[key].glsl.includes('p.');
-  return !movesWithPixel('seedC') && movesWithPixel('seedZ')
+  const movesWithPixel = (glsl) => glsl.includes('p.');
+  const parameterMoves = movesWithPixel(parsed.seedC.glsl)
+    || movesWithPixel(parsed.formula.glsl)
+    || parsed.vars.some((v) => movesWithPixel(v.seed.glsl));
+  return !parameterMoves && movesWithPixel(parsed.seedZ.glsl)
     ? { x: 0, y: 0, zoom: 100 }
     : { x: -0.7, y: 0, zoom: 135 };
 }
@@ -674,10 +728,15 @@ function writeCustomUrl(texts, parsed) {
     if (usual(parsed, f)) url.searchParams.delete(f.param);
     else url.searchParams.set(f.param, texts[f.key]);
   }
+  url.searchParams.delete('v');
+  for (const v of texts.vars) url.searchParams.append('v', `${v.name}:${v.seed}`);
   history.replaceState(null, '', url);
 }
 
-const trimTexts = (texts) => Object.fromEntries(FIELDS.map((f) => [f.key, String(texts[f.key] ?? '').trim()]));
+const trimTexts = (texts) => ({
+  ...Object.fromEntries(FIELDS.map((f) => [f.key, String(texts[f.key] ?? '').trim()])),
+  vars: readVars(texts),
+});
 
 function applyCustom(texts) {
   if (!renderer) return 'this browser has no WebGL2';
@@ -731,7 +790,7 @@ function updatePreview() {
     return;
   }
   const parts = shaderParts(parsed);
-  const key = `${parts.iter}|${parts.seedZ}|${parts.seedC}|${state.palette}`;
+  const key = [parts.iter, ...parts.seeds.map((s) => `${s.name}=${s.glsl}`), state.palette].join('|');
   if (key !== previewKey) {
     try {
       drawPreview(parts, customHome(parsed));
@@ -769,8 +828,8 @@ function showEditor() {
   history.replaceState(null, '', location.pathname + location.search);
   for (const f of FIELDS) {
     editor.input[f.key].value = opensWith?.[f.key] ?? (state[f.key] || DEFAULTS[f.key]);
-    paintField(f);
   }
+  showVarRows(opensWith ? opensWith.vars ?? [] : state.vars ?? []);
   opensWith = null;
   editor.error.textContent = '';
   editor.name.placeholder = defaultName();
@@ -795,11 +854,7 @@ editor.form.addEventListener('submit', (e) => {
 
 for (const f of FIELDS) {
   const input = editor.input[f.key];
-  input.addEventListener('input', () => {
-    editor.error.textContent = '';
-    paintField(f);
-    schedulePreview();
-  });
+  input.addEventListener('input', editorChanged);
   input.addEventListener('scroll', () => { editor.ink[f.key].scrollLeft = input.scrollLeft; });
 }
 
@@ -809,6 +864,92 @@ function editFractal(set) {
   editor.name.value = SETS[set].custom ? SETS[set].name : '';
   showEditor();
 }
+
+function makeVarRow({ name, seed }) {
+  const cell = document.createElement('div');
+  cell.className = 'editor-seed editor-var';
+
+  const head = document.createElement('div');
+  head.className = 'editor-var-head';
+  const letter = document.createElement('input');
+  letter.type = 'text';
+  letter.className = 'input editor-var-name';
+  letter.maxLength = 1;
+  letter.spellcheck = false;
+  letter.autocapitalize = 'off';
+  letter.value = name;
+  letter.title = 'Rename this variable';
+  letter.setAttribute('aria-label', 'Variable letter');
+  const drop = document.createElement('button');
+  drop.type = 'button';
+  drop.className = 'editor-var-drop';
+  drop.textContent = '×';
+  head.append(letter, drop);
+
+  const field = document.createElement('div');
+  field.className = 'editor-field';
+  const ink = document.createElement('div');
+  ink.className = 'editor-ink';
+  ink.setAttribute('aria-hidden', 'true');
+  const value = document.createElement('input');
+  value.type = 'text';
+  value.className = 'input editor-input';
+  value.spellcheck = false;
+  value.autocapitalize = 'off';
+  value.placeholder = VAR_SEED_HINT;
+  value.setAttribute('aria-describedby', 'seed-help');
+  value.value = seed;
+  field.append(ink, value);
+  cell.append(head, field);
+
+  const row = { cell, name: letter, seed: value, ink };
+  varRows.push(row);
+
+  const describe = () => {
+    const called = letter.value.trim() || 'this variable';
+    value.setAttribute('aria-label', `Starting value of ${called}`);
+    drop.title = `Delete ${called}`;
+    drop.setAttribute('aria-label', `Delete ${called}`);
+  };
+  describe();
+
+  letter.addEventListener('input', () => {
+    letter.value = letter.value.toLowerCase().replace(/[^a-z]/g, '');
+    describe();
+    editorChanged();
+  });
+  value.addEventListener('input', editorChanged);
+  value.addEventListener('scroll', () => { ink.scrollLeft = value.scrollLeft; });
+  drop.addEventListener('click', () => dropVarRow(row));
+  return cell;
+}
+
+function showVarRows(vars) {
+  for (const row of varRows) row.cell.remove();
+  varRows.length = 0;
+  editor.seeds.append(...vars.map(makeVarRow));
+  repaint();
+}
+
+function dropVarRow(row) {
+  varRows.splice(varRows.indexOf(row), 1);
+  row.cell.remove();
+  editorChanged();
+  editor.addVar.focus();
+}
+
+editor.addVar.addEventListener('click', () => {
+  const name = freeVarName(varNames());
+  if (!name) {
+    editor.error.textContent = 'that is every letter the editor has to spare';
+    return;
+  }
+  editor.seeds.append(makeVarRow({ name, seed: NEW_VAR_SEED }));
+  editorChanged();
+  const row = varRows[varRows.length - 1];
+  row.name.focus();
+  row.name.select();
+});
 
 $('#editor-cancel').addEventListener('click', leaveEditor);
 
@@ -1359,7 +1500,13 @@ for (const fractal of savedFractals) {
 
 const params = new URLSearchParams(location.search);
 if (params.get('f')) {
-  applyCustom(Object.fromEntries(FIELDS.map((f) => [f.key, params.get(f.param) ?? DEFAULTS[f.key]])));
+  applyCustom({
+    ...Object.fromEntries(FIELDS.map((f) => [f.key, params.get(f.param) ?? DEFAULTS[f.key]])),
+    vars: params.getAll('v').map((pair) => {
+      const at = pair.indexOf(':');
+      return at < 0 ? { name: pair, seed: '' } : { name: pair.slice(0, at), seed: pair.slice(at + 1) };
+    }),
+  });
 }
 
 if (readHash()) {

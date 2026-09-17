@@ -28,19 +28,33 @@ const FUNCS = {
   sinh: 'csinh', cosh: 'ccosh', tanh: 'ctanh',
 };
 
-const names = (vars, strangers, message) => ({ vars, strangers: new Set(strangers), message });
+const names = (vars, strangers = [], message = '') => ({ vars, strangers: new Set(strangers), message });
 
-const ITERATION = names(
-  { z: 'z', c: 'c' },
-  ['x', 'y'],
-  'x and y are the point being checked, so they belong to the starting values of z and c',
+const PIXEL = { x: 'vec2(p.x, 0.0)', y: 'vec2(p.y, 0.0)' };
+
+const VAR_LETTERS = [...'abdfghjklmnopqrstuvw'];
+const SPOKEN_FOR = new Set(['z', 'c', 'x', 'y', 'i', 'e']);
+
+export const varGlsl = (name) => `v_${name}`;
+
+const iteration = (extras) => names(
+  { ...PIXEL, z: 'z', c: 'c', ...Object.fromEntries(extras.map((n) => [n, varGlsl(n)])) },
 );
 
-const SEED = names(
-  { x: 'vec2(p.x, 0.0)', y: 'vec2(p.y, 0.0)' },
-  ['z', 'c'],
-  'a starting value is built from x and y, not from z or c',
+const seed = (extras) => names(
+  PIXEL,
+  ['z', 'c', ...extras],
+  'a starting value is built from x and y, not from another variable',
 );
+
+export const freeVarName = (taken) => VAR_LETTERS.find((ch) => !taken.includes(ch)) ?? null;
+
+export function varNameError(name, others) {
+  if (!/^[a-z]$/.test(name)) return 'a variable is named by one letter';
+  if (SPOKEN_FOR.has(name)) return `“${name}” is already spoken for`;
+  if (others.includes(name)) return `there are two variables called “${name}”`;
+  return null;
+}
 
 const MAX_LENGTH = 240;
 const MAX_NODES = 400;
@@ -266,8 +280,8 @@ function parse(src, mode) {
   return { glsl: compile(lex(rhs), mode).code, text: rhs };
 }
 
-export const parseFormula = (src) => parse(src, ITERATION);
-export const parseSeed = (src) => parse(src, SEED);
+export const parseFormula = (src, extras = []) => parse(src, iteration(extras));
+export const parseSeed = (src, extras = []) => parse(src, seed(extras));
 
 // ---------- The same line, coloured ----------
 
@@ -354,5 +368,5 @@ function paint(src, mode) {
   return out;
 }
 
-export const formulaTokens = (src) => paint(src, ITERATION);
-export const seedTokens = (src) => paint(src, SEED);
+export const formulaTokens = (src, extras = []) => paint(src, iteration(extras));
+export const seedTokens = (src, extras = []) => paint(src, seed(extras));
