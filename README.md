@@ -43,6 +43,7 @@ root, so the portal reads the hash on load and forwards anything shaped like
 | Save PNG at twice screen size | Space | the camera button |
 | Back to the menu, or to the formula for a custom set | Esc | Menu button |
 | Go to a location | G, or paste | click the coordinate or zoom in the HUD |
+| Julia's `C` | arrows nudge it while the map has focus, Shift by ten | click or drag on the Mandelbrot map in the HUD |
 | Colourway | `,` and `.` | the chips in the HUD |
 | Fold the HUD away | H | the `hud` toggle under the panel |
 
@@ -52,6 +53,17 @@ parameter: `#julia@x,y,zoom,re,im`. Its `C` has its own inputs in the HUD,
 with the original's four named parameters as chips. A colourway other than
 Pen rides along as `?palette=classic` before the hash, and the last pick is
 remembered per browser.
+
+Above those inputs is the map `C` is picked off, and that map is the
+Mandelbrot set. A `C` inside it gives a connected Julia set, a `C` outside
+gives dust, and the boundary between them gives the branching, filamentary
+ones. The map covers −2.1 to 0.6 and ±1.35i, the whole set and a margin, with
+a ring where `C` is. Click or drag anywhere on it and the view follows, so
+dragging the ring along the boundary runs through the Julia sets there. A `C`
+off the map, typed or dragged past the edge, leaves an arrowhead at the edge
+pointing towards it. The map draws on the same GL canvas as the menu
+thumbnails, and only for a new colourway or size, so moving `C` redraws the
+Julia view alone.
 
 The go-to form takes the real and imaginary parts and a zoom (`1e12`,
 `2^1000`, `10^301`), or one pasted line in any of these shapes: a share link

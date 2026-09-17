@@ -182,6 +182,9 @@
         <div id="palettes" class="hud-row palette-groups" aria-label="Colourway"></div>
 
         <div id="julia-panel" class="julia" hidden>
+          <canvas id="julia-map" class="minimap" width="256" height="256" tabindex="0"
+                  title="Pick C off the Mandelbrot set. Drag, or arrow keys to nudge."
+                  aria-label="Mandelbrot map: click or use the arrow keys to set C"></canvas>
           <label class="goto-row"><span class="hud-k">re</span><input id="julia-re" class="input" type="text" spellcheck="false" aria-label="Real part of C" /></label>
           <label class="goto-row"><span class="hud-k">im</span><input id="julia-im" class="input" type="text" spellcheck="false" aria-label="Imaginary part of C" /></label>
           <div class="hud-bookmarks" id="julia-presets"></div>
