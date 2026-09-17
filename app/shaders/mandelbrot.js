@@ -18,7 +18,7 @@ float escape(vec2 dc) {
 }
 
 void main() {
-  vec2 px = gl_FragCoord.xy - 0.5 * u_res;
+  vec2 px = viewPixel();
   if (inCardioidOrBulb(u_center + px * u_px)) {
     outColor = vec4(palette(0.0), 1.0);
     return;
@@ -51,6 +51,6 @@ void main() {
     outColor = vec4(palette(0.0), 1.0);
     return;
   }
-  vec2 px = gl_FragCoord.xy - 0.5 * u_res + u_offset;
+  vec2 px = viewPixel() + u_offset;
   outColor = vec4(palette(escape(fe(px * u_pxm, u_pxe))), 1.0);
 }`;

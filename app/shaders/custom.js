@@ -54,7 +54,7 @@ ${start}
 }
 
 void main() {
-  vec2 p = u_center + (gl_FragCoord.xy - 0.5 * u_res) * u_px;
+  vec2 p = u_center + viewPixel() * u_px;
   outColor = vec4(palette(escape(p)), 1.0);
 }`;
 }

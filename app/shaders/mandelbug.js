@@ -12,7 +12,7 @@ float escape(vec2 c) {
 }
 
 void main() {
-  vec2 c = u_center + (gl_FragCoord.xy - 0.5 * u_res) * u_px;
+  vec2 c = u_center + viewPixel() * u_px;
   outColor = vec4(palette(escape(c)), 1.0);
 }`;
 
@@ -35,7 +35,7 @@ float escape(vec2 dc) {
 }
 
 void main() {
-  vec2 dc = (gl_FragCoord.xy - 0.5 * u_res + u_offset) * u_px;
+  vec2 dc = (viewPixel() + u_offset) * u_px;
   outColor = vec4(palette(escape(dc)), 1.0);
 }`;
 
@@ -60,6 +60,6 @@ float escape(FE dc) {
 }
 
 void main() {
-  vec2 px = gl_FragCoord.xy - 0.5 * u_res + u_offset;
+  vec2 px = viewPixel() + u_offset;
   outColor = vec4(palette(escape(fe(px * u_pxm, u_pxe))), 1.0);
 }`;

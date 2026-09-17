@@ -4,7 +4,7 @@ import { VERT, COMMON } from './shaders/common.js';
 import { customBody } from './shaders/custom.js';
 import { SOURCES, SHADERS, COST } from './shaders/registry.js';
 
-const UNIFORMS = ['u_res', 'u_px', 'u_center', 'u_offset', 'u_pxm', 'u_pxe', 'u_maxIter', 'u_refLen', 'u_ref2', 'u_julia', 'u_ref', 'u_palette'];
+const UNIFORMS = ['u_res', 'u_px', 'u_center', 'u_offset', 'u_rot', 'u_pxm', 'u_pxe', 'u_maxIter', 'u_refLen', 'u_ref2', 'u_julia', 'u_ref', 'u_palette'];
 const REF_W = 1024;
 
 const STRIP_BUDGET = 2e9;
@@ -173,6 +173,8 @@ export class Renderer {
     }
     const prog = this.programs[name];
     if (view.julia) gl.uniform2f(prog.u.u_julia, Number(view.julia.re), Number(view.julia.im));
+    const angle = view.angle ?? 0;
+    gl.uniform2f(prog.u.u_rot, Math.cos(angle), Math.sin(angle));
     gl.viewport(0, 0, w, h);
     gl.uniform2f(prog.u.u_res, w, h);
     gl.uniform1i(prog.u.u_maxIter, view.maxIter);

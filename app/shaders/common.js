@@ -13,6 +13,7 @@ uniform vec2 u_res;
 uniform float u_px;
 uniform vec2 u_center;
 uniform vec2 u_offset;
+uniform vec2 u_rot;
 uniform float u_pxm;
 uniform int u_pxe;
 uniform int u_maxIter;
@@ -25,6 +26,14 @@ uniform int u_palette;
 out vec4 outColor;
 
 const float PERIOD = 100.0;
+
+// A pixel's offset from the centre of the view, along the plane's axes rather
+// than the screen's. u_rot is the cosine and sine of the view angle, and the
+// turn back is its transpose.
+vec2 viewPixel() {
+  vec2 p = gl_FragCoord.xy - 0.5 * u_res;
+  return vec2(p.x * u_rot.x + p.y * u_rot.y, p.y * u_rot.x - p.x * u_rot.y);
+}
 
 vec3 hsv(float h, float s, float v) {
   vec3 rgb = clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
