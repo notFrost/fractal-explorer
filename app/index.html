@@ -92,7 +92,7 @@
   <main id="editor" class="page" hidden>
     <header class="page-head">
       <h1 class="title"><span id="editor-verb">Create</span><br />Fractal</h1>
-      <p class="lede">One formula, iterated until it escapes, from starting values you set. Render it once, or save it to the menu.</p>
+      <p class="lede">One formula, iterated until it escapes, from starting values you set. Add variables of your own. Render it once, or save it to the menu.</p>
     </header>
 
     <div class="editor">
@@ -108,7 +108,7 @@
                  placeholder="Z_(n+1) = Z_(n)^2 + C" aria-describedby="formula-help" />
         </div>
         <p id="formula-help" class="editor-help">
-          <span class="tok-var">z c</span>
+          <span class="tok-var" id="formula-vars">z c</span>
           <span class="tok-num">numbers</span>
           <span class="tok-const">i pi e</span>
           <span class="tok-op">+ − × ÷ ^</span>
@@ -117,7 +117,7 @@
           <span>|z| is abs z</span>
         </p>
 
-        <div class="editor-seeds">
+        <div class="editor-seeds" id="editor-seeds">
           <div class="editor-seed">
             <label class="editor-label" for="seed-z">z₀</label>
             <div class="editor-field">
@@ -135,10 +135,14 @@
             </div>
           </div>
         </div>
+        <p class="editor-add">
+          <button type="button" id="add-var" class="btn">+ Variable</button>
+        </p>
         <p id="seed-help" class="editor-help">
           <span class="tok-var">x y</span>
           <span>the real and imaginary parts of the point being checked</span>
           <span>z₀ = 0 with c = x+yi is the Mandelbrot set</span>
+          <span>an added variable holds its starting value, as c does</span>
         </p>
 
         <div class="editor-actions">

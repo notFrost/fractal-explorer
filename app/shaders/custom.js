@@ -37,11 +37,11 @@ vec2 ccosh(vec2 z) { return vec2(cosh(z.x) * cos(z.y), sinh(z.x) * sin(z.y)); }
 vec2 ctanh(vec2 z) { return cdiv(csinh(z), ccosh(z)); }
 `;
 
-export function customBody({ iter, seedZ, seedC }) {
+export function customBody({ iter, seeds }) {
+  const start = seeds.map(({ name, glsl }) => `  vec2 ${name} = ${glsl};`).join('\n');
   return CUSTOM_LIB + `
 float escape(vec2 p) {
-  vec2 c = ${seedC};
-  vec2 z = ${seedZ};
+${start}
   for (int n = 0; n < u_maxIter; n++) {
     z = ${iter};
     float zz = dot(z, z);

@@ -205,6 +205,17 @@ and start `z` at the pixel instead, `z₀ = x+yi`, and the formula draws the
 Julia set of that constant; the view then opens on the origin rather than on
 −0.7, since a Julia set is centred there.
 
+**+ Variable**, under the pair, adds a value of your own: a letter and a
+starting value the orbit keeps for the whole run, exactly as `c` does. The
+editor takes the first free letter, and the box holding it renames it. `z`,
+`c`, `x`, `y`, `i` and `e` are spoken for, which leaves twenty on offer; a
+second variable by the same letter, or none at all, is refused rather than
+rendered. The × beside a letter drops it. `z₀` and `c` have no ×, since the
+formula and the pixel are written in terms of them. A letter joins the key
+under the formula the moment it exists, so `z² + kc` reads `k` as a variable
+once `k` is there and as an unknown name before that, and a starting value of
+`x+yi` on a variable makes it the parameter the view opens on −0.7 for.
+
 Beside the fields is a live preview of the view **Render** will open on, at
 most 640 pixels across. It redraws a quarter second after the last keystroke,
 on the same GL canvas the menu cards use, and prints underneath how the parser
@@ -249,15 +260,15 @@ its stored entry. Ids count up rather than filling the gap a deletion leaves,
 so an old `#saved1@` link falls back to the menu instead of opening a
 different fractal.
 
-What it reads: `z` and `c`, decimal numbers, `i`, `pi` and `e`; `+ - * / ^`
-with brackets, two values side by side for multiplication, letters written
-together as well, so `x+yi` reads as `x + y·i`; `abs re im conj exp log sqrt
-sin cos tan sinh cosh tanh`, each of one argument; and bars for absolute
-value, so Burning Ship is `(|re(z)| + i|im(z)|)² + conj(c)`. The notation the
-cards use works as typed — superscripts, subscripts, `←`, `×`, `÷`, `−` — so
-`zᶻ + c` is Pacman. A whole-number exponent squares and
-multiplies rather than going through `exp` and `log`, which is faster and,
-unlike the log, defined at `z = 0`.
+What it reads: `z`, `c` and any variable you have added, decimal numbers,
+`i`, `pi` and `e`; `+ - * / ^` with brackets, two values side by side for
+multiplication, letters written together as well, so `x+yi` reads as
+`x + y·i`; `abs re im conj exp log sqrt sin cos tan sinh cosh tanh`, each of
+one argument; and bars for absolute value, so Burning Ship is
+`(|re(z)| + i|im(z)|)² + conj(c)`. The notation the cards use works as typed
+— superscripts, subscripts, `←`, `×`, `÷`, `−` — so `zᶻ + c` is Pacman. A
+whole-number exponent squares and multiplies rather than going through `exp`
+and `log`, which is faster and, unlike the log, defined at `z = 0`.
 
 The same character has to open and close the pair, so a bar opens where a
 value is due and closes where one has just ended. `||z| + |c||` and `2|z|`
@@ -266,12 +277,13 @@ pairs inside them.
 
 The editor colours each line as you type. Brackets and bars take a colour from
 their nesting depth and the six colours cycle, so a pair matches and the pairs
-either side of it do not. `z` and `c`, or `x` and `y` in the starting values,
-numbers, `i pi e`, the function names and the operators each have a colour of
-their own. The index on `zₙ₊₁` is dim, since the parser drops it, and a
-bracket or bar left open turns red, as does a name that belongs to a different
-field, such as `z` in a starting value. A layer behind each field carries the
-colours; the field itself keeps the caret, the selection and the scrolling.
+either side of it do not. `z` and `c` and the letters you have added, or `x`
+and `y` in the starting values, numbers, `i pi e`, the function names and the
+operators each have a colour of their own. The index on `zₙ₊₁` is dim, since
+the parser drops it, and a bracket or bar left open turns red, as does a name
+that belongs to a different field, such as `z` in a starting value. A layer
+behind each field carries the colours; the field itself keeps the caret, the
+selection and the scrolling.
 The help line under a field prints each group in its colour, so it doubles as
 the key.
 
@@ -282,7 +294,8 @@ over to a reference orbit. A formula can also overshoot the
 bailout or reach NaN, neither of which the smooth count survives, so a count
 it cannot read falls back to the step number. The text rides in the URL as
 `?f=` before the hash, with `?z=` and `?c=` for the starting values when they
-are not the usual pair, so a custom view shares like any other.
+are not the usual pair and a `?v=k:0.5` for each variable added, so a custom
+view shares like any other.
 
 ## Ported from the original
 

@@ -130,6 +130,49 @@
   font-size: 1.05rem;
 }
 
+.editor-var-head {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.editor-var-name {
+  width: 2rem;
+  flex: 0 0 auto;
+  padding: 0.05rem 0.2rem;
+  font-family: var(--mono);
+  text-align: center;
+  color: var(--syn-var);
+  background: transparent;
+  border-color: transparent;
+}
+
+.editor-var-name:hover { border-color: var(--line); }
+
+.editor-var-drop {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--dim);
+  border: 1px solid transparent;
+  transition: color var(--motion), border-color var(--motion);
+}
+
+.editor-var-drop:hover,
+.editor-var-drop:focus-visible {
+  color: var(--magenta);
+  border-color: var(--magenta);
+}
+
+.editor-add {
+  margin: 0;
+  justify-self: start;
+}
+
 .editor-help {
   display: flex;
   flex-wrap: wrap;
