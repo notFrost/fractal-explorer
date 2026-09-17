@@ -5,6 +5,7 @@ import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palet
 import { parseFormula, parseSeed, formulaTokens, seedTokens, varGlsl, freeVarName, varNameError } from './formula.js';
 import { frameCustom } from './framing.js';
 import { pickSpot } from './dive.js';
+import { drawPlane } from './plane.js';
 import { readSaved, writeSaved, freeId, registerSet, unregisterSet } from './saved.js';
 
 // ---------- State ----------
@@ -21,6 +22,9 @@ const state = {
   // Colourway key, see palettes.js. Rides in the URL as ?palette= and is
   // remembered per browser.
   palette: DEFAULT_PALETTE,
+  // Whether the complex plane is drawn over the picture. Rides in the URL as
+  // ?plane=1 and is remembered per browser.
+  plane: false,
   formula: '',
   seedZ: '',
   seedC: '',
@@ -61,6 +65,10 @@ const juliaUi = {
   im: $('#julia-im'),
   presets: $('#julia-presets'),
   error: $('#julia-error'),
+};
+const plane = {
+  canvas: $('#plane'),
+  toggle: $('#plane-toggle'),
 };
 const setLabel = $('#set-c');
 const backBtn = $('#back');
@@ -205,13 +213,23 @@ function readHash() {
 
 // ---------- Rendering ----------
 
+// Device pixels to a CSS pixel, capped so a phone does not render four times
+// the work for a difference no one can see.
+const pixelRatio = () => Math.min(2, window.devicePixelRatio || 1);
+
 function fitCanvas() {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const dpr = pixelRatio();
   const w = Math.round(canvas.clientWidth * dpr);
   const h = Math.round(canvas.clientHeight * dpr);
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w;
     canvas.height = h;
+  }
+  // The plane sits on its own canvas of the same size. A hidden one has no
+  // layout of its own, so it takes the picture's.
+  if (plane.canvas.width !== w || plane.canvas.height !== h) {
+    plane.canvas.width = w;
+    plane.canvas.height = h;
   }
 }
 
@@ -247,6 +265,7 @@ function render() {
   const seq = ++frameSeq;
   const { strips } = renderer.begin(viewNow(maxIter));
   updateHud();
+  paintPlane();
   scheduleHash();
   const size = `${canvas.width}×${canvas.height}`;
   const refNote = renderer.refCpuMs > 1 ? ` · ref ${Math.round(renderer.refCpuMs)} ms` : '';
@@ -295,7 +314,10 @@ function savePng() {
   const pal = state.palette === DEFAULT_PALETTE ? '' : `_${state.palette}`;
   const rot = state.angle ? `_rot${angleText(state.angle)}` : '';
   const name = `${state.set}${j}_${c.xString().slice(0, 24)}_${c.yString().slice(0, 24)}_${c.zoomString()}x${rot}${pal}.png`;
-  canvas.toBlob((blob) => {
+  // The plane is drawn over a copy at the size of the shot, so its lines and
+  // numbers keep the weight they have on screen.
+  const shot = state.plane ? planeOver(canvas, pixelRatio() * scale) : canvas;
+  shot.toBlob((blob) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -309,6 +331,59 @@ function savePng() {
   frameSeq++;
   requestRender();
 }
+
+// ---------- The complex plane ----------
+//
+// The axes and their grid draw on a second canvas over the picture, so
+// showing them, hiding them or turning the view costs no fractal frame.
+// plane.js draws them; here is the switch and where they are remembered.
+
+const PLANE_STORE = 'plane';
+
+const planeCtx = plane.canvas.getContext('2d');
+
+const planeView = (width, height, dpr) => ({ cam: state.cam, angle: radians(state.angle), width, height, dpr });
+
+function paintPlane() {
+  const { width, height } = plane.canvas;
+  planeCtx.clearRect(0, 0, width, height);
+  if (state.plane) drawPlane(planeCtx, planeView(width, height, pixelRatio()));
+}
+
+// The picture with the plane over it, for the screenshot.
+function planeOver(picture, dpr) {
+  const out = document.createElement('canvas');
+  out.width = picture.width;
+  out.height = picture.height;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(picture, 0, 0);
+  drawPlane(ctx, planeView(out.width, out.height, dpr));
+  return out;
+}
+
+// Shows or hides the plane, and remembers it the way a colourway is
+// remembered. A link carries it as ?plane=1; a plain link opens without it.
+function setPlane(on) {
+  state.plane = on;
+  plane.canvas.hidden = !on;
+  plane.toggle.setAttribute('aria-pressed', String(on));
+  plane.toggle.title = on ? 'Hide the complex plane (P)' : 'Show the complex plane (P)';
+  try { localStorage.setItem(PLANE_STORE, on ? '1' : '0'); } catch { /* private mode */ }
+  const url = new URL(location.href);
+  if (on) url.searchParams.set('plane', '1');
+  else url.searchParams.delete('plane');
+  history.replaceState(null, '', url);
+  paintPlane();
+}
+
+// The link wins, then the browser's memory, then off.
+function initialPlane() {
+  const fromLink = new URLSearchParams(location.search).get('plane');
+  if (fromLink !== null) return fromLink !== '0';
+  try { return localStorage.getItem(PLANE_STORE) === '1'; } catch { return false; }
+}
+
+plane.toggle.addEventListener('click', () => setPlane(!state.plane));
 
 // ---------- Go to a location ----------
 
@@ -347,6 +422,7 @@ function parseLocation(text) {
   if (m) {
     const pal = /[?&]palette=(\w+)/i.exec(t);
     const rot = /[?&]angle=(-?[\d.]+)/i.exec(t);
+    const shown = /[?&]plane=([01])/i.exec(t);
     return {
       set: m[1].toLowerCase(),
       xs: m[2],
@@ -355,6 +431,7 @@ function parseLocation(text) {
       c: readC(m[5], m[6]),
       palette: pal?.[1],
       angle: rot ? Number(rot[1]) : 0,
+      plane: shown ? shown[1] === '1' : undefined,
     };
   }
   m = COMPLEX.exec(t);
@@ -378,6 +455,7 @@ function goTo(loc) {
   if (loc.c) state.julia = loc.c;
   else if (loc.set === 'julia' && state.set !== 'julia') state.julia = { ...SETS.julia.c };
   if (loc.palette && paletteByKey(loc.palette)) setPalette(loc.palette, { render: false });
+  if (loc.plane !== undefined) setPlane(loc.plane);
   if (loc.set && loc.set !== state.set) showViewer(loc.set);
   else showJuliaUi();
   state.angle = normalisedAngle(angle);
@@ -595,7 +673,7 @@ function drawMarker(ctx, w, h, dpr) {
 function paintMap() {
   if (juliaUi.panel.hidden || !renderer) return;
   const map = juliaUi.map;
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const dpr = pixelRatio();
   const w = Math.round(map.clientWidth * dpr);
   const h = Math.round(map.clientHeight * dpr);
   // A folded HUD leaves the map without layout. It paints when the HUD opens.
@@ -839,7 +917,7 @@ let previewTimer = 0;
 let previewKey = '';
 
 function drawPreview(parts, home) {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const dpr = pixelRatio();
   const c = preview.canvas;
   const w = Math.min(PREVIEW_MAX_PX, Math.round((c.clientWidth || 320) * dpr));
   c.width = w;
@@ -1225,6 +1303,7 @@ window.addEventListener('keydown', (e) => {
   if (k === ',') stepPalette(-1);
   if (k === '.') stepPalette(1);
   if (k === 'h') setHud(!hudOpen);
+  if (k === 'p') setPlane(!state.plane);
   if (k === 'r') setAngle(0);
   if (k === 'g') { e.preventDefault(); openGoto(); }
   if (k === 'f') dive();
@@ -1570,7 +1649,7 @@ function showMenu() {
 // Each card shows the view its set opens at, Julia with its default C.
 function renderCards() {
   if (!renderer) return;
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const dpr = pixelRatio();
   for (const card of document.querySelectorAll('.card')) {
     const set = card.dataset.set;
     const h = SETS[set].home;
@@ -1691,9 +1770,10 @@ cards.addEventListener('click', (e) => {
 
 // ---------- Boot ----------
 
-window.__fx = { state, dive, pickSpot, showViewer, showMenu, showEditor, editFractal, renderCards, render, renderer, iterationsFor, updatePreview, Camera, parseLocation, parseZoom, goTo, applyJulia, applyCustom, setPalette, savedFractals };
+window.__fx = { state, dive, pickSpot, showViewer, showMenu, showEditor, editFractal, renderCards, render, renderer, iterationsFor, updatePreview, Camera, parseLocation, parseZoom, goTo, applyJulia, applyCustom, setPalette, setPlane, savedFractals };
 
 setPalette(initialPalette(), { render: false });
+setPlane(initialPlane());
 state.angle = initialAngle();
 
 for (const card of cards.querySelectorAll('.card')) card.after(editControl(card.dataset.set));

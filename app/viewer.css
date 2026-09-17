@@ -23,6 +23,19 @@ body.viewing { overflow: hidden; }
 
 .view.dragging { cursor: grabbing; }
 
+/* The complex plane, on its own canvas over the picture so showing it costs
+   no fractal frame. Every pointer gesture belongs to the canvas underneath. */
+.plane {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+.plane[hidden] { display: none; }
+
 .topbar {
   position: absolute;
   top: 0;
@@ -105,6 +118,8 @@ body.viewing { overflow: hidden; }
 }
 
 .cbtn-accent { border-color: var(--magenta); color: var(--magenta); }
+/* A toggle shows its state: on is the accent, off is the plain circle. */
+.cbtn[aria-pressed="true"] { border-color: var(--magenta); color: var(--magenta); }
 .cbtn:hover { border-color: var(--ink); }
 .cbtn:active, .cbtn-accent:hover { background: var(--magenta); border-color: var(--magenta); color: #000; }
 
@@ -116,7 +131,7 @@ body.viewing { overflow: hidden; }
 /* Narrow screens: the HUD owns the bottom, so the controls join the top bar. */
 @media (max-width: 720px) {
   .help { display: none; }
-  /* Four buttons in a row would run across the set name, so they go two to a
+  /* The buttons in a row would run across the set name, so they go two to a
      row and take the free canvas under the top bar instead. */
   .controls {
     top: max(0.75rem, env(safe-area-inset-top));
