@@ -1,7 +1,7 @@
-import { MAX_ITER, FLOAT_LOG_ZOOM, BIG_LOG_ZOOM, FE_LOG_ZOOM } from './fractals.js';
+import { MAX_ITER, STAGE_HEIGHT, FLOAT_LOG_ZOOM, BIG_LOG_ZOOM, FE_LOG_ZOOM } from './fractals.js';
 import { bitsFor, ORBITS } from './precision.js';
 import { VERT, COMMON } from './shaders/common.js';
-import { customBody } from './shaders/custom.js';
+import { customBody, depthBody } from './shaders/custom.js';
 import { SOURCES, SHADERS, COST } from './shaders/registry.js';
 
 const UNIFORMS = ['u_res', 'u_px', 'u_center', 'u_offset', 'u_rot', 'u_pxm', 'u_pxe', 'u_maxIter', 'u_refLen', 'u_ref2', 'u_julia', 'u_ref', 'u_palette'];
@@ -62,6 +62,8 @@ export class Renderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     this.ref = null;
+    this.depth = null;
+    this.depthKey = null;
     this.queries = [];
     this.timing = null;
     this.maxSide = Math.min(gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0], 8192);
@@ -135,7 +137,7 @@ export class Renderer {
     const gl = this.gl;
     const { width: w, height: h } = this.canvas;
     const { cam } = view;
-    const scale = h / 360;
+    const scale = h / STAGE_HEIGHT;
     const shaders = SHADERS[view.set];
     const iters = ORBITS[view.set].iters(view.maxIter);
     const deep = !shaders.float || this.forceDeep || cam.lz > FLOAT_LOG_ZOOM;
@@ -216,6 +218,35 @@ export class Renderer {
   renderAll(view) {
     const { strips } = this.begin(view);
     for (let i = 0; i < strips; i++) this.drawStrip(i, strips);
+  }
+
+  // One byte per pixel of how long that pixel's orbit lasts, for framing a
+  // typed formula. It draws at the float tier, upright and in one call, on a
+  // canvas sized to the survey, and reads the bytes straight back.
+  depthMap(parts, cam, w, h, maxIter) {
+    if (this.lost) return null;
+    const gl = this.gl;
+    const key = customKey(parts);
+    if (key !== this.depthKey) {
+      if (this.depth) gl.deleteProgram(this.depth.p);
+      this.depth = this.link(COMMON + depthBody(parts));
+      this.depthKey = key;
+    }
+    this.canvas.width = w;
+    this.canvas.height = h;
+    const prog = this.depth;
+    gl.useProgram(prog.p);
+    gl.uniform2f(prog.u.u_res, w, h);
+    gl.uniform1f(prog.u.u_px, STAGE_HEIGHT / (h * cam.zoom));
+    gl.uniform2f(prog.u.u_center, cam.xDouble(), cam.yDouble());
+    gl.uniform2f(prog.u.u_rot, 1, 0);
+    gl.uniform1i(prog.u.u_maxIter, maxIter);
+    gl.viewport(0, 0, w, h);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const bytes = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+    return bytes;
   }
 
   gpuTime() {

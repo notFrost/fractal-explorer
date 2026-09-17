@@ -212,16 +212,14 @@ imaginary parts of the point being checked, and so does the line itself, where
 value, the editor names the field it belongs to instead of calling it unknown.
 The usual pair, `z₀ = 0` and `c = x+yi`, is the Mandelbrot arrangement. Fix `c`
 at a constant and start `z` at the pixel instead, `z₀ = x+yi`, and it draws the
-Julia set of that constant; the view then opens on the origin rather than on
-−0.7, since a Julia set is centred there.
+Julia set of that constant.
 
 **+ Variable**, under the pair, adds a value of your own: a letter and a
 starting value the orbit keeps for the whole run, exactly as `c` does. It is
 written the way `z₀` and `c` are, so it takes `x` and `y` as well as numbers;
 `k = x+yi` with `c = 0` and `z ← z² + k` is the Mandelbrot set with the
-parameter carried by `k` instead, and the view opens on −0.7 for it as it
-would for `c`. The editor takes the first free letter, and the box holding it
-renames it. `z`, `c`, `x`, `y`, `i` and `e` are spoken for, which leaves
+parameter carried by `k` instead. The editor takes the first free letter, and
+the box holding it renames it. `z`, `c`, `x`, `y`, `i` and `e` are spoken for, which leaves
 twenty on offer; a second variable by the same letter, or none at all, is
 refused rather than rendered. The × beside a letter drops it. `z₀` and `c`
 have no ×, since the formula and the pixel are written in terms of them. A
@@ -237,6 +235,43 @@ starting value that is not the usual one beside it. Text the parser cannot
 read leaves the last picture up, dimmed, rather than blanking mid-keystroke. A
 formula previewed and then cancelled is dropped, and the shader goes back to
 the last one rendered.
+
+### Finding the fractal
+
+Where a typed formula's set sits is not something the text says. `z² + c` is
+around −0.7, a Julia set is around the origin, `z² + c + 3` is around −3.7,
+and `c = 50(x+yi)` draws the Mandelbrot set a fiftieth of the size. So the
+preview, the view Render opens on and a saved fractal's thumbnail are all
+framed on a measurement rather than a guess.
+
+The survey is in `app/framing.js`. It draws the formula into a 128×96
+greyscale map of how far through the iteration budget each pixel got, with the
+points that never escape at full white, and takes the bounding box of the
+slowest pixels. Those are the set and the filaments around it, wherever they
+are. The reading starts at the whitest grey level that has any pixels and
+takes in each level under it that fits in a fiftieth of the picture. It stops
+short of that fiftieth rather than overshooting it, because the points that
+escape on the first or second step are one enormous level, and a reading that
+falls into that level boxes the bailout radius instead of the set.
+
+One box is only as tight as the view it was measured in, so the survey opens
+eight units tall at the origin and closes in over up to five passes. A box
+against the edge of the survey gives a direction rather than a centre, so the
+next pass moves to that box and looks twice as wide. A box clear of the edges
+is fitted, a quarter of its span is left as margin, and the fit is measured
+again. On the Mandelbrot arrangement the survey settles on −0.679 at 137×,
+against the hand-picked −0.7 at 135× the built-in set opens on, and on the
+editor's MandelBug it settles on −0.981 + 0.972i against −0.97 + 0.97i by
+hand.
+
+An unbounded set, `zᶻ + c` among them, never gives a box clear of the edges,
+and nor does a set too large for the widest view the app allows. With no
+extent to frame, the survey falls back to where the fractal's kind usually sits: the
+origin for a Julia set, whose pixel is z₀ under a fixed parameter, and −0.7
+for a parameter plane. A lost GL context takes the same fallback. Each pass
+costs one GPU readback, and the survey runs once per formula rather than once
+per keystroke: about 7 ms per saved fractal at startup, and 30 to 80 ms behind
+the preview's quarter-second wait.
 
 **Save**, beside Render, puts the formula in the menu under the name in the
 Name field. An empty field names it `Fractal 3`, counting the ones already
