@@ -79,12 +79,14 @@ export const SETS = {
   },
   pacman: {
     name: 'Pacman',
-    formula: 'z ← zᶻ + c',
+    formula: 'z ← Re(z)² − Im(z²+c)² + Re(c) + i·Im(z²+c)',
     maxLogZoom: BIG_LOG_ZOOM,
-    home: { x: 1, y: 0, zoom: 96 },
-    // The editor has no 0⁰ = 1, so its copy starts on z₁ = 1 + c instead: the
-    // same orbit, one step along.
-    edit: { formula: 'z^z + c', seedZ: '1+x+yi', seedC: 'x+yi' },
+    home: { x: -0.4, y: 0, zoom: 135 },
+    edit: {
+      formula: 're(z)^2 - im(z^2+c)^2 + re(c) + i*im(z^2+c)',
+      seedZ: '0',
+      seedC: 'x+yi',
+    },
     bookmarks: [],
   },
   custom: {

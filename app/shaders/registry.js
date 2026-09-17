@@ -44,7 +44,7 @@ export const COST = {
   julia: 1, juliaPert: 1, juliaFE: 5,
   ship: 1.2, shipPert: 2, shipFE: 7,
   bug: 1, bugPert: 1, bugFE: 5,
-  pacman: 8,
+  pacman: 1,
   custom: 4,
 };
 
