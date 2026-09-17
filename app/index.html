@@ -218,12 +218,21 @@
     <div class="controls" aria-label="Controls">
       <button id="detail-down" class="cbtn" type="button" title="Fewer iterations ( [ )" aria-label="Fewer iterations">◔</button>
       <button id="detail-up" class="cbtn" type="button" title="More iterations ( ] )" aria-label="More iterations">●</button>
+      <button id="dive" class="cbtn" type="button" title="Dive into a random spot (F)" aria-label="Dive into a random spot">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <rect x="3.5" y="3.5" width="17" height="17" rx="4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          <g fill="currentColor">
+            <circle cx="8.5" cy="8.5" r="1.7"/><circle cx="15.5" cy="8.5" r="1.7"/><circle cx="12" cy="12" r="1.7"/>
+            <circle cx="8.5" cy="15.5" r="1.7"/><circle cx="15.5" cy="15.5" r="1.7"/>
+          </g>
+        </svg>
+      </button>
       <button id="save" class="cbtn cbtn-accent" type="button" title="Save PNG (Space)" aria-label="Save PNG">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>
       </button>
     </div>
 
-    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · Z X turn, R levels · [ ] detail · , . colour · H folds the panel · G or paste to go somewhere · Space saves</p>
+    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · Z X turn, R levels · [ ] detail · , . colour · H folds the panel · G or paste to go somewhere · F dives somewhere new · Space saves</p>
   </section>
 
   <script type="module" src="app.js"></script>

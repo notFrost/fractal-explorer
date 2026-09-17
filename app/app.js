@@ -4,6 +4,7 @@ import { Renderer } from './gpu.js';
 import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palettes.js';
 import { parseFormula, parseSeed, formulaTokens, seedTokens, varGlsl, freeVarName, varNameError } from './formula.js';
 import { frameCustom } from './framing.js';
+import { pickSpot } from './dive.js';
 import { readSaved, writeSaved, freeId, registerSet, unregisterSet } from './saved.js';
 
 // ---------- State ----------
@@ -367,6 +368,7 @@ function parseLocation(text) {
 
 // Moves the camera. Returns an error string, or null when it went.
 function goTo(loc) {
+  cancelDive();
   const lz = loc.lz === undefined ? state.cam.lz : loc.lz;
   if (!Number.isFinite(lz)) return 'could not read the zoom';
   const angle = loc.angle === undefined ? state.angle : loc.angle;
@@ -887,6 +889,7 @@ function leaveEditor() {
 }
 
 function showEditor() {
+  cancelDive();
   keys.clear();
   frameSeq++;
   mode = 'editor';
@@ -1197,6 +1200,7 @@ window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (movementKeys.has(k)) {
     e.preventDefault();
+    cancelDive();
     if (keys.has(k)) return;
     keys.add(k);
     startMotion();
@@ -1223,6 +1227,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'h') setHud(!hudOpen);
   if (k === 'r') setAngle(0);
   if (k === 'g') { e.preventDefault(); openGoto(); }
+  if (k === 'f') dive();
 });
 
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
@@ -1273,6 +1278,7 @@ function turnBy(from, to) {
 
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
+  cancelDive();
   zoomAt(e.clientX, e.clientY, Math.pow(1.2, -e.deltaY / 100));
 }, { passive: false });
 
@@ -1283,6 +1289,7 @@ let pinch = null;
 const fingerBearing = (a, b) => Math.atan2(a.y - b.y, b.x - a.x) / DEGREE;
 
 canvas.addEventListener('pointerdown', (e) => {
+  cancelDive();
   try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   canvas.classList.add('dragging');
@@ -1326,8 +1333,85 @@ const endPointer = (e) => {
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
 
+// ---------- Diving into the picture ----------
+//
+// The button drops the view into a spot picked out of the frame on screen.
+// dive.js does the picking; here is the fall.
+//
+// It falls five doublings, at the rate a held E key zooms, and the spot's
+// offset across the screen runs down to nothing over the same time. So the
+// spot drifts in a straight line to the middle of the screen while the view
+// closes in on it, instead of swinging out and back as it would if the centre
+// crossed the plane at an even pace.
+
+const DIVE_GAIN = 5;
+const DIVE_RATE = 2;
+
+// A dive with next to no room left under it is not worth the trip.
+const LEAST_GAIN = 0.5;
+
+const stillFrames = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+let flight = null;
+
+const cancelDive = () => { flight = null; };
+
+// Stage-pixel offset of a point in the frame from the centre of the frame.
+// The rows come back from the GPU bottom up, so its y already points up.
+function frameOffset(px, py) {
+  const scale = canvas.height / 360;
+  return { sx: (px - canvas.width / 2) / scale, sy: (py - canvas.height / 2) / scale };
+}
+
+// The camera partway through a fall: on the spot, zoomed in by as much of the
+// gain as has passed, then backed off by what is left of the spot's offset
+// across the screen. Each frame is built from the camera the fall started at,
+// so nothing accumulates.
+function flightCamera(f, u) {
+  const cam = f.from.clone();
+  cam.pan(f.to.x, f.to.y);
+  cam.setLogZoom(f.from.lz + u * f.gain);
+  cam.pan(-(1 - u) * f.to.x, -(1 - u) * f.to.y);
+  return cam;
+}
+
+function dive() {
+  if (mode !== 'view' || !renderer) return;
+  const gain = clampLogZoom(state.cam.lz + DIVE_GAIN) - state.cam.lz;
+  if (gain < LEAST_GAIN) {
+    hud.status.textContent = 'as deep as this set goes';
+    return;
+  }
+  const frame = renderer.framePixels();
+  const spot = frame && pickSpot(frame);
+  if (!spot) return;
+  const { sx, sy } = frameOffset(spot.x, spot.y);
+  const f = { from: state.cam.clone(), to: worldDelta(sx, sy), gain };
+  if (stillFrames.matches) {
+    state.cam = flightCamera(f, 1);
+    requestRender();
+    return;
+  }
+  flight = f;
+  const ms = (gain / DIVE_RATE) * 1000;
+  const start = performance.now();
+  // A second press starts a new fall, so this one stops as soon as it is no
+  // longer the current one.
+  const step = (now) => {
+    if (flight !== f || mode !== 'view') return;
+    const t = Math.min(1, (now - start) / ms);
+    // Smoothstep, so the fall starts and ends at rest.
+    state.cam = flightCamera(f, t * t * (3 - 2 * t));
+    requestRender();
+    if (t < 1) requestAnimationFrame(step);
+    else flight = null;
+  };
+  requestAnimationFrame(step);
+}
+
 // ---------- Buttons ----------
 
+$('#dive').addEventListener('click', dive);
 $('#detail-down').addEventListener('click', () => changeDetail(-1));
 $('#detail-up').addEventListener('click', () => changeDetail(1));
 $('#save').addEventListener('click', savePng);
@@ -1425,6 +1509,7 @@ function bookmarkCamera(b) {
 }
 
 function showViewer(set, view) {
+  cancelDive();
   if (set === 'custom' && !hasCustom()) {
     showEditor();
     return;
@@ -1451,6 +1536,7 @@ function showViewer(set, view) {
       const y = Number(b.y);
       el.textContent = `${fmt(x)}${y < 0 ? ' − ' : ' + '}${fmt(Math.abs(y))}i @ ${fmtZoom(parseZoom(b.zoom))}`;
       el.addEventListener('click', () => {
+        cancelDive();
         state.cam = bookmarkCamera(b);
         requestRender();
       });
@@ -1467,6 +1553,7 @@ function leaveViewer() {
 }
 
 function showMenu() {
+  cancelDive();
   keys.clear();
   frameSeq++;
   mode = 'menu';
@@ -1604,7 +1691,7 @@ cards.addEventListener('click', (e) => {
 
 // ---------- Boot ----------
 
-window.__fx = { state, showViewer, showMenu, showEditor, editFractal, renderCards, render, renderer, iterationsFor, updatePreview, Camera, parseLocation, parseZoom, goTo, applyJulia, applyCustom, setPalette, savedFractals };
+window.__fx = { state, dive, pickSpot, showViewer, showMenu, showEditor, editFractal, renderCards, render, renderer, iterationsFor, updatePreview, Camera, parseLocation, parseZoom, goTo, applyJulia, applyCustom, setPalette, savedFractals };
 
 setPalette(initialPalette(), { render: false });
 state.angle = initialAngle();

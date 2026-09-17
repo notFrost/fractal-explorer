@@ -116,9 +116,14 @@ body.viewing { overflow: hidden; }
 /* Narrow screens: the HUD owns the bottom, so the controls join the top bar. */
 @media (max-width: 720px) {
   .help { display: none; }
+  /* Four buttons in a row would run across the set name, so they go two to a
+     row and take the free canvas under the top bar instead. */
   .controls {
     top: max(0.75rem, env(safe-area-inset-top));
     bottom: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    width: calc(2 * 2.5rem + 0.5rem);
   }
   /* Up here the controls share the top-right corner with the portal link, so
      they sit one button width plus a gap to its left. */
