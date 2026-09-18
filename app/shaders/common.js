@@ -58,75 +58,113 @@ vec3 hsv(float h, float s, float v) {
   return v * mix(vec3(1.0), rgb, s);
 }
 
+float penValue(float t) { return clamp(t * 5.0, 0.0, 100.0) / 100.0; }
+
 vec3 penPalette(float t) {
-  float h = fract((t + 90.0) / PERIOD);
-  float v = clamp(t * 5.0, 0.0, 100.0) / 100.0;
-  return hsv(h, 1.0, v);
+  return hsv(fract((t + 90.0) / PERIOD), 1.0, penValue(t));
 }
 
-vec3 ramp5(float u, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4, vec4 pos) {
-  if (u < pos.x) return mix(c0, c1, u / pos.x);
-  if (u < pos.y) return mix(c1, c2, (u - pos.x) / (pos.y - pos.x));
-  if (u < pos.z) return mix(c2, c3, (u - pos.y) / (pos.z - pos.y));
-  if (u < pos.w) return mix(c3, c4, (u - pos.z) / (pos.w - pos.z));
-  return mix(c4, c0, (u - pos.w) / (1.0 - pos.w));
+// Every hue at full saturation averages to half the value it is drawn at.
+vec3 penMean(float t) { return vec3(0.5 * penValue(t)); }
+
+struct Ramp { vec3 c0; vec3 c1; vec3 c2; vec3 c3; vec3 c4; vec4 pos; };
+
+vec3 ramp5(Ramp r, float u) {
+  if (u < r.pos.x) return mix(r.c0, r.c1, u / r.pos.x);
+  if (u < r.pos.y) return mix(r.c1, r.c2, (u - r.pos.x) / (r.pos.y - r.pos.x));
+  if (u < r.pos.z) return mix(r.c2, r.c3, (u - r.pos.y) / (r.pos.z - r.pos.y));
+  if (u < r.pos.w) return mix(r.c3, r.c4, (u - r.pos.z) / (r.pos.w - r.pos.z));
+  return mix(r.c4, r.c0, (u - r.pos.w) / (1.0 - r.pos.w));
+}
+
+// Both fract() and tri() cross the ramp at a steady rate, so each leg counts
+// for its own length times the average of the two colours at its ends.
+vec3 ramp5Mean(Ramp r) {
+  return 0.5 * ((r.c0 + r.c1) * r.pos.x
+    + (r.c1 + r.c2) * (r.pos.y - r.pos.x)
+    + (r.c2 + r.c3) * (r.pos.z - r.pos.y)
+    + (r.c3 + r.c4) * (r.pos.w - r.pos.z)
+    + (r.c4 + r.c0) * (1.0 - r.pos.w));
 }
 
 float tri(float u) { return 1.0 - abs(2.0 * fract(u) - 1.0); }
 
-vec3 classicPalette(float t) {
-  return ramp5(fract(t / PERIOD),
+Ramp classicRamp() {
+  return Ramp(
     vec3(0.0, 0.027, 0.392), vec3(0.125, 0.42, 0.796), vec3(0.929, 1.0, 1.0),
     vec3(1.0, 0.667, 0.0), vec3(0.0, 0.008, 0.0),
     vec4(0.16, 0.42, 0.6425, 0.8575));
 }
 
-vec3 emberPalette(float t) {
-  float u = tri(t / PERIOD) * 0.999;
-  return ramp5(u,
+Ramp emberRamp() {
+  return Ramp(
     vec3(0.02, 0.0, 0.0), vec3(0.35, 0.03, 0.03), vec3(0.85, 0.18, 0.04),
     vec3(1.0, 0.7, 0.13), vec3(1.0, 0.96, 0.84),
     vec4(0.25, 0.5, 0.75, 0.999));
 }
 
-vec3 abyssPalette(float t) {
-  float u = tri(t / PERIOD) * 0.999;
-  return ramp5(u,
+Ramp abyssRamp() {
+  return Ramp(
     vec3(0.0, 0.07, 0.1), vec3(0.0, 0.37, 0.45), vec3(0.04, 0.58, 0.59),
     vec3(0.58, 0.82, 0.74), vec3(0.91, 0.85, 0.65),
     vec4(0.25, 0.5, 0.75, 0.999));
 }
 
-vec3 ultravioletPalette(float t) {
-  return ramp5(fract(t / PERIOD),
+Ramp ultravioletRamp() {
+  return Ramp(
     vec3(0.02, 0.0, 0.08), vec3(0.016, 0.0, 1.0), vec3(0.48, 0.0, 1.0),
     vec3(1.0, 0.17, 0.84), vec3(1.0, 0.84, 0.96),
     vec4(0.2, 0.45, 0.7, 0.9));
 }
 
-vec3 inkPalette(float t) {
-  float band = fract(t / 8.0);
-  float edge = smoothstep(0.0, 0.08, band) * (1.0 - smoothstep(0.92, 1.0, band));
-  float shade = mix(0.12, 0.93, edge);
-  return shade * vec3(1.0, 0.97, 0.9);
+const float BAND = 8.0;
+const float BAND_EDGE = 0.08;
+const vec3 INK_LINE = 0.12 * vec3(1.0, 0.97, 0.9);
+const vec3 INK_PAGE = 0.93 * vec3(1.0, 0.97, 0.9);
+const vec3 CHALK_LINE = 0.92 * vec3(0.9, 0.95, 1.0);
+const vec3 CHALK_PAGE = 0.1 * vec3(0.9, 0.95, 1.0);
+
+vec3 bandPalette(float t, vec3 line, vec3 page) {
+  float band = fract(t / BAND);
+  float edge = smoothstep(0.0, BAND_EDGE, band) * (1.0 - smoothstep(1.0 - BAND_EDGE, 1.0, band));
+  return mix(line, page, edge);
 }
 
-vec3 chalkPalette(float t) {
-  float band = fract(t / 8.0);
-  float edge = smoothstep(0.0, 0.08, band) * (1.0 - smoothstep(0.92, 1.0, band));
-  float shade = mix(0.92, 0.1, edge);
-  return shade * vec3(0.9, 0.95, 1.0);
-}
+// The two edges give back half their width each, leaving the page everywhere
+// else.
+vec3 bandMean(vec3 line, vec3 page) { return mix(line, page, 1.0 - BAND_EDGE); }
 
 vec3 palette(float t) {
   if (!(t > 0.0)) return vec3(0.0);
-  if (u_palette == 1) return classicPalette(t);
-  if (u_palette == 2) return emberPalette(t);
-  if (u_palette == 3) return abyssPalette(t);
-  if (u_palette == 4) return ultravioletPalette(t);
-  if (u_palette == 5) return inkPalette(t);
-  if (u_palette == 6) return chalkPalette(t);
+  if (u_palette == 1) return ramp5(classicRamp(), fract(t / PERIOD));
+  if (u_palette == 2) return ramp5(emberRamp(), tri(t / PERIOD) * 0.999);
+  if (u_palette == 3) return ramp5(abyssRamp(), tri(t / PERIOD) * 0.999);
+  if (u_palette == 4) return ramp5(ultravioletRamp(), fract(t / PERIOD));
+  if (u_palette == 5) return bandPalette(t, INK_LINE, INK_PAGE);
+  if (u_palette == 6) return bandPalette(t, CHALK_LINE, CHALK_PAGE);
   return penPalette(t);
+}
+
+vec3 paletteMean(float t) {
+  if (u_palette == 1) return ramp5Mean(classicRamp());
+  if (u_palette == 2) return ramp5Mean(emberRamp());
+  if (u_palette == 3) return ramp5Mean(abyssRamp());
+  if (u_palette == 4) return ramp5Mean(ultravioletRamp());
+  if (u_palette == 5) return bandMean(INK_LINE, INK_PAGE);
+  if (u_palette == 6) return bandMean(CHALK_LINE, CHALK_PAGE);
+  return penMean(t);
+}
+
+float paletteCycle() { return (u_palette == 5 || u_palette == 6) ? BAND : PERIOD; }
+
+// A pixel covers as much of the palette as the escape count crosses inside
+// it, so one that crosses a whole cycle covers every colour the palette has.
+// Its point sample is then one of those colours at random, and their mean is
+// the honest answer.
+vec4 shade(float t) {
+  float cycles = fwidth(t) / paletteCycle();
+  if (!(t > 0.0)) return vec4(0.0, 0.0, 0.0, 1.0);
+  return vec4(mix(paletteMean(t), palette(t), 1.0 - smoothstep(0.0, 1.0, cycles)), 1.0);
 }
 
 vec2 csq(vec2 z) { return vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y); }
