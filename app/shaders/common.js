@@ -4,6 +4,20 @@ void main() {
   gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
+// Puts a finished pass on the canvas. A coarse pass holds fewer pixels than
+// the canvas has, so the sample points run between the centres of its first
+// and last texels and the bilinear filter spreads it up to size.
+export const BLIT = `#version 300 es
+precision highp float;
+uniform sampler2D u_src;
+uniform vec2 u_dst;
+uniform vec2 u_lo;
+uniform vec2 u_hi;
+out vec4 outColor;
+void main() {
+  outColor = texture(u_src, mix(u_lo, u_hi, gl_FragCoord.xy / u_dst));
+}`;
+
 export const COMMON = `#version 300 es
 precision highp float;
 precision highp int;
