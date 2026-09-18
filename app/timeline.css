@@ -1,0 +1,279 @@
+/* The animation timeline: a strip of keyframes across the foot of the viewer,
+   with the transport above it and the export settings below. The surface,
+   buttons and inputs come from design/chrome.css; what is here is the shelf
+   and the cards on it.
+
+   The panel stands over the picture rather than beside it, so the HUD, the
+   control bar and the help line lift by its measured height. studio.js writes
+   that height to --timeline-h as the panel grows and shrinks. */
+
+.timeline {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0.5rem 0.75rem;
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  display: grid;
+  gap: 0.35rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.timeline[hidden] { display: none; }
+
+body.timeline-open .hud {
+  bottom: calc(var(--timeline-h, 0px) + 0.75rem);
+  max-height: calc(100vh - var(--timeline-h, 0px) - 5rem);
+  overflow-y: auto;
+}
+
+body.timeline-open .controls {
+  bottom: calc(var(--timeline-h, 0px) + 0.75rem);
+}
+
+body.timeline-open .help { display: none; }
+
+/* ---------- The transport ---------- */
+
+.tl-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.tl-title {
+  font-family: var(--display);
+  font-stretch: condensed;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 0.25rem;
+}
+
+.tl-gap { flex: 1 1 1rem; }
+
+.tl-scrub {
+  flex: 1 1 8rem;
+  min-width: 6rem;
+  accent-color: var(--magenta);
+}
+
+.tl-scrub:disabled { opacity: 0.4; }
+
+.tl-time {
+  color: var(--dim);
+  min-width: 9ch;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.tl-field[hidden] { display: none; }
+.tl-field .input { width: auto; }
+.tl-field select.input { padding-right: 0.2rem; }
+
+.tl-check { gap: 0.35rem; }
+.tl-check input { accent-color: var(--magenta); }
+
+.tl-close {
+  color: var(--dim);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0 0.35rem;
+}
+
+.tl-close:hover { color: var(--magenta); }
+
+/* ---------- The keyframes ---------- */
+
+.tl-keys {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.1rem 0 0.4rem;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.tl-keys:empty { display: none; }
+
+.tl-key {
+  flex: 0 0 auto;
+  width: 10.5rem;
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.3rem;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.tl-jump {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--line);
+  line-height: 0;
+}
+
+.tl-jump:hover { border-color: var(--magenta); }
+
+.tl-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  background: #000;
+}
+
+.tl-key-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.tl-key-number {
+  color: var(--magenta);
+  min-width: 1.5ch;
+}
+
+.tl-key-zoom { font-variant-numeric: tabular-nums; }
+.tl-key-turn { color: var(--dim); }
+
+.tl-key-where {
+  color: var(--dim);
+  font-size: 0.85em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tl-key-times {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.tl-key-time {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.tl-key-time span { color: var(--dim); }
+
+.tl-key-time .input {
+  padding: 0.1rem 0.15rem;
+  font-size: 0.9em;
+}
+
+.tl-key-time .input:disabled { color: var(--dim); opacity: 0.5; }
+
+.tl-key-tools {
+  display: flex;
+  gap: 0.15rem;
+  justify-content: space-between;
+}
+
+.tl-tool {
+  flex: 1 1 auto;
+  padding: 0.1rem 0;
+  color: var(--dim);
+  border: 1px solid transparent;
+  line-height: 1.2;
+}
+
+.tl-tool:hover:not(:disabled) { color: var(--ink); border-color: var(--dim); }
+.tl-drop:hover:not(:disabled) { color: var(--magenta); border-color: var(--magenta); }
+.tl-tool:disabled { opacity: 0.3; cursor: default; }
+
+/* ---------- Export, text and progress ---------- */
+
+.tl-empty {
+  margin: 0;
+  color: var(--dim);
+  max-width: 70ch;
+}
+
+.tl-empty[hidden] { display: none; }
+
+.tl-export {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+}
+
+.tl-export[hidden] { display: none; }
+
+.tl-estimate {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--dim);
+}
+
+.tl-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+}
+
+.tl-progress[hidden] { display: none; }
+
+.tl-progress progress {
+  flex: 1 1 8rem;
+  height: 0.6rem;
+  accent-color: var(--magenta);
+}
+
+.tl-textbox {
+  display: grid;
+  gap: 0.35rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+}
+
+.tl-textbox[hidden] { display: none; }
+
+.tl-textbox textarea {
+  font-family: var(--mono);
+  resize: vertical;
+  white-space: pre;
+}
+
+.tl-textbox-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.tl-note {
+  margin: 0;
+  color: var(--dim);
+}
+
+.tl-note:empty { display: none; }
+
+@media (max-width: 720px) {
+  .timeline { max-height: 70vh; padding: 0.4rem 0.5rem; }
+  .tl-key { width: 8.5rem; }
+  .tl-title { display: none; }
+  .tl-time { min-width: 0; }
+  /* The HUD owns the bottom of a narrow screen and the timeline owns the rest,
+     so the two share what is left rather than stacking past the top. */
+  body.timeline-open .hud { max-height: 40vh; }
+}

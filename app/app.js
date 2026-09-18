@@ -1,5 +1,5 @@
 import { SETS, MIN_LOG_ZOOM, iterationsFor } from './fractals.js';
-import { Camera } from './precision.js';
+import { Camera, formatZoom } from './precision.js';
 import { Renderer } from './gpu.js';
 import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palettes.js';
 import { parseFormula, parseSeed, formulaTokens, seedTokens, varGlsl, freeVarName, varNameError } from './formula.js';
@@ -8,6 +8,9 @@ import { pickSpot } from './dive.js';
 import { drawPlane } from './plane.js';
 import { readSaved, writeSaved, freeId, registerSet, unregisterSet } from './saved.js';
 import { createGrid } from './grid.js';
+import { createStudio } from './studio.js';
+import { record } from './movie.js';
+import { prune as pruneAnimations } from './keyframes.js';
 
 // ---------- State ----------
 
@@ -94,6 +97,9 @@ const preview = {
 
 let renderer = null;
 let mode = 'menu';
+// Built at the end of the file, once the sets and the grid are in place. The
+// render loop asks whether it is playing, so the binding exists from here.
+let studio = null;
 
 try {
   renderer = new Renderer(canvas);
@@ -122,12 +128,6 @@ function fmt(n) {
   const a = Math.abs(n);
   if (a !== 0 && (a < 1e-4 || a >= 1e6)) return n.toExponential(4);
   return n.toFixed(6).replace(/\.?0+$/, '') || '0';
-}
-
-function fmtZoom(lz) {
-  if (lz < Math.log2(1e5)) return Math.round(2 ** lz).toLocaleString() + '×';
-  if (lz < 1000) return (2 ** lz).toExponential(2) + '×';
-  return `10^${Math.round(lz * 0.30103)}×`;
 }
 
 function clampLogZoom(lz, set = state.set) {
@@ -177,7 +177,7 @@ function hudCoord() {
 function updateHud() {
   hud.c.textContent = hudCoord();
   hud.c.title = state.cam.lz < 40 ? 'Edit the coordinate (G)' : `${state.cam.xString()}\n${state.cam.yString()}`;
-  hud.zoom.textContent = fmtZoom(state.cam.lz);
+  hud.zoom.textContent = formatZoom(state.cam.lz);
   hud.angle.textContent = `${Number(state.angle.toFixed(1))}°`;
   hud.iter.textContent = String(iterNow());
   hud.detail.textContent = String(state.detail);
@@ -272,7 +272,8 @@ let settleTimer = 0;
 const moving = () => pointers.size > 0
   || [...keys].some((k) => k !== 'shift')
   || Boolean(flight)
-  || Boolean(zoomGlide);
+  || Boolean(zoomGlide)
+  || Boolean(studio?.playing);
 
 // A frame that stopped at the coarse pass leaves nothing to bring the full one
 // back, so it asks for another once the view has had time to stop. Further
@@ -302,7 +303,10 @@ function redrawView() {
 // While the view is moving the coarse pass is all that runs, and the strips
 // wait for it to stop. A newer frame cancels whatever is left of the old one.
 function render() {
-  if (mode !== 'view' || !renderer) return;
+  // An export draws its own frames straight onto this canvas, a strip to an
+  // animation frame. A viewer frame in between would resize the canvas under
+  // it and overwrite what it has drawn.
+  if (mode !== 'view' || !renderer || studio?.busy) return;
   fitCanvas();
   state.cam.setLogZoom(clampLogZoom(state.cam.lz));
   const view = viewNow();
@@ -394,7 +398,7 @@ function render() {
 
 // Render at twice the screen size, download, then restore the view.
 function savePng() {
-  if (!renderer || mode !== 'view') return;
+  if (!renderer || mode !== 'view' || studio?.busy) return;
   const cap = renderer.maxSide;
   const scale = Math.min(2, cap / canvas.width, cap / canvas.height);
   const w = canvas.width;
@@ -1061,6 +1065,7 @@ function leaveEditor() {
 
 function showEditor() {
   cancelDrift();
+  studio?.show(false);
   keys.clear();
   frameSeq++;
   settled = false;
@@ -1276,6 +1281,7 @@ function deleteSaved(id) {
 function dropSavedSet(id) {
   renderer?.setCustom(id, null);
   unregisterSet(id);
+  pruneAnimations();
   grid.remove(id);
 }
 
@@ -1364,12 +1370,21 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (mode !== 'view') return;
-  if (e.target.closest?.('input, textarea')) {
+  if (e.target.closest?.('input, textarea, select')) {
     if (e.key === 'Escape') closeGoto();
     return;
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const k = e.key.toLowerCase();
+  // A render owns the canvas and the camera until it is done, so the only key
+  // that means anything during one is the one that calls it off.
+  if (studio?.busy) {
+    if (k === 'escape') {
+      e.preventDefault();
+      studio.stopRender();
+    }
+    return;
+  }
   if (movementKeys.has(k)) {
     e.preventDefault();
     cancelDrift();
@@ -1401,6 +1416,8 @@ window.addEventListener('keydown', (e) => {
   if (k === 'r') setAngle(0);
   if (k === 'g') { e.preventDefault(); openGoto(); }
   if (k === 'f') dive();
+  if (k === 'v') studio?.toggle();
+  if (k === 'k') studio?.add();
 });
 
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
@@ -1500,6 +1517,7 @@ function glideStep(now) {
 
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
+  if (studio?.busy) return;
   cancelDive();
   glideZoom(e.clientX, e.clientY, -wheelNotches(e) * STEP_LZ);
 }, { passive: false });
@@ -1511,6 +1529,7 @@ let pinch = null;
 const fingerBearing = (a, b) => Math.atan2(a.y - b.y, b.x - a.x) / DEGREE;
 
 canvas.addEventListener('pointerdown', (e) => {
+  if (studio?.busy) return;
   cancelDrift();
   try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -1609,7 +1628,7 @@ function flightCamera(f, u) {
 }
 
 function dive() {
-  if (mode !== 'view' || !renderer) return;
+  if (mode !== 'view' || !renderer || studio?.busy) return;
   const gain = clampLogZoom(state.cam.lz + DIVE_GAIN) - state.cam.lz;
   if (gain < LEAST_GAIN) {
     hud.status.textContent = 'as deep as this set goes';
@@ -1657,7 +1676,7 @@ $('#detail-up').addEventListener('click', () => changeDetail(1));
 $('#save').addEventListener('click', savePng);
 backBtn.addEventListener('click', leaveViewer);
 window.addEventListener('resize', () => {
-  if (mode !== 'view') return;
+  if (mode !== 'view' || studio?.busy) return;
   paintMap();
   requestRender();
 });
@@ -1763,6 +1782,7 @@ function showViewer(set, view) {
   viewer.hidden = false;
   closeGoto();
   $('#set-name').textContent = SETS[set].name;
+  studio?.load(set);
   backBtn.textContent = set === 'custom' ? '← Formula' : '← Menu';
   backBtn.title = set === 'custom' ? 'Back to the formula (Esc)' : 'Back to menu (Esc)';
   showJuliaUi();
@@ -1774,7 +1794,7 @@ function showViewer(set, view) {
       el.className = 'bookmark';
       const x = Number(b.x);
       const y = Number(b.y);
-      el.textContent = `${fmt(x)}${y < 0 ? ' − ' : ' + '}${fmt(Math.abs(y))}i @ ${fmtZoom(parseZoom(b.zoom))}`;
+      el.textContent = `${fmt(x)}${y < 0 ? ' − ' : ' + '}${fmt(Math.abs(y))}i @ ${formatZoom(parseZoom(b.zoom))}`;
       el.addEventListener('click', () => {
         cancelDrift();
         state.cam = bookmarkCamera(b);
@@ -1788,12 +1808,18 @@ function showViewer(set, view) {
 }
 
 function leaveViewer() {
+  if (studio?.busy) {
+    hud.status.textContent = 'a render is running — Stop it first';
+    return;
+  }
+  studio?.show(false);
   if (state.set === 'custom') showEditor();
   else showMenu();
 }
 
 function showMenu() {
   cancelDrift();
+  studio?.show(false);
   keys.clear();
   frameSeq++;
   settled = false;
@@ -1865,6 +1891,91 @@ const grid = createGrid({
 
 $('#new-folder').addEventListener('click', () => grid.addFolder());
 window.__fx.grid = grid;
+
+// A fractal deleted in another tab leaves its animation behind, and nothing
+// can open it again.
+pruneAnimations();
+
+// ---------- The animation timeline ----------
+//
+// studio.js owns the panel and the keyframes; what it cannot do is touch the
+// camera, the GL canvas or the shader, so those go through here. A keyframe is
+// the view on screen, a scrub or a rendered frame puts one back, and the
+// export borrows the canvas until it is done.
+
+// The plane over a movie frame keeps the weight it has on screen: its lines
+// and numbers are set in device pixels, so they scale with the frame rather
+// than thinning away at 4K.
+const moviePlane = (ctx, { width, height }) => drawPlane(ctx, planeView(width, height, Math.max(1, height / 720)));
+
+// A keyframe's thumbnail, drawn away from the canvas so the viewer does not
+// blur and snap back every time one is taken. GL hands its rows back bottom
+// up; a 2D canvas reads them top down.
+function keyframeThumb(view, w, h) {
+  if (!renderer || renderer.lost) return null;
+  const bytes = renderer.offscreen({
+    set: state.set,
+    cam: view.cam,
+    maxIter: iterationsFor(view.cam.lz, 1, state.set),
+    julia: view.julia ?? state.julia,
+    angle: radians(view.angle),
+  }, w, h);
+  if (!bytes) return null;
+  const rows = new Uint8ClampedArray(bytes.length);
+  const row = w * 4;
+  for (let y = 0; y < h; y++) rows.set(bytes.subarray((h - 1 - y) * row, (h - y) * row), y * row);
+  return new ImageData(rows, w, h);
+}
+
+studio = createStudio({
+  view: () => ({ cam: state.cam, angle: state.angle, julia: state.set === 'julia' ? state.julia : null }),
+
+  show: (view) => {
+    cancelDrift();
+    state.cam = view.cam;
+    state.angle = normalisedAngle(view.angle);
+    const movedC = Boolean(view.julia) && state.set === 'julia'
+      && (view.julia.re !== state.julia.re || view.julia.im !== state.julia.im);
+    if (movedC) state.julia = view.julia;
+    // An export owns the canvas, so the panel follows the camera in the HUD
+    // and nothing draws. Redrawing the map and its marker is cheap otherwise,
+    // but not sixty times a second for a C that has not moved.
+    if (studio?.busy) {
+      updateHud();
+      if (movedC) showSetLabel();
+      return;
+    }
+    if (movedC) showJuliaUi();
+    requestRender();
+  },
+
+  thumb: keyframeThumb,
+  screen: () => ({ width: canvas.width, height: canvas.height }),
+  maxSide: () => renderer?.maxSide ?? 8192,
+  clampZoom: (lz) => clampLogZoom(lz),
+
+  busy: (on) => {
+    // The plane is drawn for the frame being exported, not for the canvas on
+    // screen, which spends the render at whatever size the movie is. Its own
+    // overlay would sit there stale, so it steps aside until the view is back.
+    plane.canvas.hidden = on || !state.plane;
+    if (on) {
+      cancelDrift();
+      keys.clear();
+      closeGoto();
+      return;
+    }
+    redrawView();
+  },
+
+  record: (options) => record({
+    ...options,
+    renderer,
+    canvas,
+    overlay: state.plane ? moviePlane : null,
+  }),
+});
+window.__fx.studio = studio;
 
 const params = new URLSearchParams(location.search);
 if (params.get('f')) {

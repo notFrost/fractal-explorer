@@ -13,6 +13,9 @@ Try [10^301 zoom](https://fractal-explorer-six.vercel.app/app/#mandelbrot@0,1,2^
 to see the arbitrary-precision path working: a 1128-bit reference orbit, drawn
 in 77 strips.
 
+Any view can be taken as a keyframe, and the timeline under the viewer renders
+the path between keyframes out to an MP4 or a GIF with every frame drawn whole.
+
 ## Name
 
 This project has two names. In casual conversation, it can be referred to as Fractal Explorer. However, that name is not specific to to this program, with several other fractal explorers sharing that name, so it can also be called FMP, short for "Fractal Modification Program". Of course, FMP is not a unique acronym, but no other similar programs share this name, meaning in the context of fractal viewers, FMP is the project-specific name. In writing, FMP can also be frequently used to make writing information about the program faster.
@@ -49,6 +52,8 @@ root, so the portal reads the hash on load and forwards anything shaped like
 | Julia's `C` | arrows nudge it while the map has focus, Shift by ten | click or drag on the Mandelbrot map in the HUD |
 | Colourway | `,` and `.` | the chips in the HUD |
 | Show the complex plane | P | the grid button |
+| Open the animation timeline | V | the clapper button |
+| Take a keyframe where the view stands | K | + Keyframe on the timeline |
 | Fold the HUD away | H | the `hud` toggle under the panel |
 | Move a card or folder on the menu | arrow keys, with its grip focused | drag the grip |
 
@@ -270,6 +275,121 @@ contour bands every eight iterations, dark on paper or pale on slate.
 **Timing** in the HUD sums `EXT_disjoint_timer_query_webgl2` queries across
 the strips of one frame. `ref` is the CPU time for the reference orbit when it
 had to be recomputed.
+
+## Animation
+
+**V**, or the clapper button, opens a timeline across the foot of the viewer.
+**+ Keyframe**, or **K**, takes the whole view as it stands — centre, zoom,
+rotation, and Julia's `C` — and puts it on the strip. Move the view and press
+again. The animation runs from each keyframe to the next, and building one is
+the same work as exploring: the die, the go-to form, a bookmark and a pasted
+link all leave a view a keyframe can be taken from.
+
+Each card carries two numbers. `hold` is the seconds the view stands still on
+that keyframe, and `then` is the seconds it takes to reach the next one; the
+last keyframe has nowhere to go, so its `then` is greyed rather than hidden.
+◀ and ▶ move a keyframe along the strip, ⟳ retakes it where the view now
+stands, × drops it, and the thumbnail is a button that puts the view back on
+it. **Play** runs the path at the viewer's usual quality — coarse while it
+moves, sharp when it stops — and the slider scrubs it by hand.
+
+A keyframe keeps its centre as the decimal strings the HUD prints rather than
+as a double, so one taken at 10^300 is the point it was taken at. The
+thumbnails are drawn away from the canvas, into the same offscreen target the
+coarse pass uses, so taking a keyframe does not blur the picture and snap it
+back.
+
+### The path between two keyframes
+
+Zoom runs evenly in log2, since that is how the eye reads it: a run from
+100× to 10^12 spends as long over each factor of two as over any other.
+
+The centre is the part worth writing down. Carried across at an even pace it
+swings out of frame and back, because at depth the distance left is thousands
+of screens wide and stays that way until the last instant, so the picture sits
+still and then lurches. What reads as steady is the other keyframe's offset
+*on screen* coming down at an even rate, so it walks in a straight line to the
+middle of the frame while the view closes on it. That is the fall a dive
+already takes, and it holds for a segment that pans as well as one that zooms.
+
+A centre `share × gap` from the deep keyframe stands `share × gap × 2^lz`
+pixels off it, so holding that product even in `u` gives
+`share = (1 − u) 2^(−u D)` over `D` doublings. Zooming out is the same move
+played backwards rather than a different one, which is the same rule reversed
+in `u` about the other keyframe: `share = u 2^((1 − u) D)`. Both are measured
+off the deep end, because the share there is a small number held to its own
+last digit where one measured off the shallow end would be `1 − 10^-22` and
+lose every digit that says where the view is. The share multiplies a
+fixed-point BigInt, and a double taken apart into the mantissa and exponent it
+already is carries the shift, since `round(share × 2^bits)` flushes a share of
+2^-1000 to zero long before the picture stops moving. A zoom out measured
+against the matching zoom in agrees to 6×10^-13 stage pixels over 293
+doublings.
+
+Rotation crosses at an even pace, and what a keyframe records is the total
+turn rather than the angle modulo a whole one. A captured angle takes the
+winding nearest the keyframe before it, so 350° followed by 10° turns twenty
+degrees rather than most of the way round; an angle written in the text box is
+taken as written, so 720 spins twice. Julia's `C` crosses evenly too, so two
+keyframes on different `C` morph one Julia set into the other while the camera
+moves.
+
+The **ease** runs over the whole path's moving time rather than over each
+segment, so a run through six keyframes sets off once and settles once instead
+of stopping at every one of them. A hold is time the view stands still by
+request, so the ease leaves it out. **Steady** is no ease at all, and a steady
+zoom is the constant rate of doubling the classic fractal zoom runs at.
+
+### Rendering a movie
+
+**Render…** takes a format, a size up to 4K, a frame rate, a quality or dither
+setting, and the iteration detail to draw at. It then prints how many frames
+that is, how long the video runs, and roughly what it will weigh, before
+anything starts.
+
+Every frame is drawn at full size and at the full iteration depth, however
+long it takes. The viewer's coarse pass exists because a frame that took two
+seconds would be two seconds late; a movie has no such clock, so no coarse
+pass enters one. The strips are the viewer's own: a frame too expensive for
+one draw call is split across animation frames so no call runs long enough for
+the driver to decide the GPU has hung. A ten-second zoom to 10^300 can take an
+hour, and every frame of it is the picture the viewer would have settled on.
+The panel counts the frames off with a rough time remaining and the bytes so
+far, **Stop** or **Esc** calls it off, and the camera and the canvas go back to
+where they were.
+
+**MP4** is H.264 through the browser's own `VideoEncoder`. The container is
+written in `app/encoders/mp4.js`: an `ftyp`, one `mdat` holding every sample
+end to end, and a `moov` last, because its sample table needs sizes the last
+frame settles. It asks for High profile at the smallest level the frame fits
+and falls back through Main to Constrained Baseline on a machine that has only
+those. A frame the encoder reorders is shown after the one that follows it in
+the file, and the gap goes in a `ctts`.
+
+**GIF** is written in `app/encoders/gif.js`. Every frame carries its own
+256-colour table, chosen by median cut, because one table shared across a zoom
+would be picked off the first frame and wrong by the last: a zoom walks through
+the whole colourway as the iteration counts climb. Floyd and Steinberg's error
+diffusion is on by default and trades the bands a fractal gradient leaves for a
+grain; turning it off makes a smaller file. GIF counts a delay in hundredths of
+a second, so a rate that does not divide 100 is rounded to one that does, and
+the panel says what the file will actually run at. Neither encoder pulls in a
+dependency.
+
+The complex plane, if it is on, is drawn over every frame the way it is drawn
+over a screenshot, at a weight that scales with the size of the frame.
+
+An animation is kept per set in this browser's local storage under
+`animations`, beside the saved fractals and the menu arrangement, so it
+survives a reload but does not travel with a link. The editor's own preview set
+is the exception: what it draws is whatever formula stands in the fields, so
+its keyframes last as long as the viewer stays on that formula and are not
+written down. A fractal saved to the menu has an id of its own and keeps its
+animation like any other set. **Text** prints the animation as JSON and reads
+one back, which is how an animation travels; a path of deep keyframes is far
+too long to ride in a link. An animation pasted under a different fractal's
+name is refused rather than mixed in, and a keyframe past the set's zoom limit
+is brought back to it.
 
 ## Arranging the menu
 
