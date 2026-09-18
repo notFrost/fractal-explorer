@@ -5,7 +5,7 @@ import { customBody, depthBody } from './shaders/custom.js';
 import { SOURCES, SHADERS, COST } from './shaders/registry.js';
 
 const UNIFORMS = ['u_res', 'u_px', 'u_center', 'u_offset', 'u_rot', 'u_pxm', 'u_pxe', 'u_maxIter', 'u_refLen', 'u_ref2', 'u_julia', 'u_ref', 'u_palette'];
-const BLIT_UNIFORMS = ['u_src', 'u_dst', 'u_lo', 'u_hi'];
+const BLIT_UNIFORMS = ['u_src', 'u_dst', 'u_org', 'u_mx', 'u_my'];
 const REF_W = 1024;
 
 // A pass costs its pixels times its iterations times the shader's weight.
@@ -29,6 +29,17 @@ const FRAME_MS = 12;
 // readable size can spend, and below this the picture says nothing about where
 // the view is.
 const COARSE_FLOOR = 1 / 16;
+
+// A fence the GPU has not signalled by now is one this code will not wait on
+// any longer, whatever the driver is doing with it.
+const LATE_MS = 250;
+
+// How far a pass may be moved and still stand in for a frame. Past this the
+// camera has left most of it behind.
+const REPROJECT_LZ = 3;
+const REPROJECT_STAGE = 2 * STAGE_HEIGHT;
+
+const juliaKey = (view) => (view.julia ? `${view.julia.re},${view.julia.im}` : '');
 
 const customKey = (parts) => (parts ? [parts.iter, ...parts.seeds.map((s) => `${s.name}=${s.glsl}`)].join('|') : null);
 
@@ -93,8 +104,14 @@ export class Renderer {
     this.texH = 0;
     this.passW = this.canvas.width;
     this.passH = this.canvas.height;
+    this.passScale = 1;
+    this.passView = null;
+    this.passSync = null;
+    this.passAt = 0;
+    this.lastCoarse = 1;
     this.queries = [];
     this.timing = null;
+    this.timedScale = 1;
     this.maxSide = Math.min(gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0], 8192);
   }
 
@@ -143,8 +160,14 @@ export class Renderer {
     const { name, iters } = this.plan(view);
     const full = this.canvas.width * this.canvas.height * iters * COST[name];
     const rate = this.rates.get(name) ?? SEED_RATE;
+    const ms = (s) => (full * s * s) / rate;
     let s = 1;
-    while (s > COARSE_FLOOR && (full * s * s) / rate > FRAME_MS) s /= 2;
+    while (s > COARSE_FLOOR && ms(s) > FRAME_MS) s /= 2;
+    // A rate measured frame by frame wanders, and a scale that followed it
+    // would flick the picture between two sharpnesses. Going down takes the
+    // budget; coming back up takes room to spare.
+    if (s > this.lastCoarse && ms(s) > FRAME_MS * 0.6) s = this.lastCoarse;
+    this.lastCoarse = s;
     return s;
   }
 
@@ -168,11 +191,8 @@ export class Renderer {
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.passTex, 0);
   }
 
-  // Spreads the coarse pass over the whole canvas. The full-size pass then
-  // draws straight onto the canvas strip by strip, so each band it finishes
-  // replaces the blurred one under it and the rest of the picture stays up.
-  present() {
-    if (this.lost || !this.passTex) return;
+  // Draws the pass texture over the whole canvas under the map BLIT describes.
+  blitPass(org, mx, my) {
     const gl = this.gl;
     const { width: w, height: h } = this.canvas;
     const prog = this.blit;
@@ -184,9 +204,93 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, this.passTex);
     gl.uniform1i(prog.u.u_src, 0);
     gl.uniform2f(prog.u.u_dst, w, h);
-    gl.uniform2f(prog.u.u_lo, 0.5 / this.texW, 0.5 / this.texH);
-    gl.uniform2f(prog.u.u_hi, (this.texW - 0.5) / this.texW, (this.texH - 0.5) / this.texH);
+    gl.uniform2f(prog.u.u_org, org.x, org.y);
+    gl.uniform2f(prog.u.u_mx, mx.x, mx.y);
+    gl.uniform2f(prog.u.u_my, my.x, my.y);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  // Spreads the coarse pass over the whole canvas. The sample points run
+  // between the centres of its first and last texels, so the bilinear filter
+  // reaches the edges without reading past them. The full-size pass then draws
+  // straight onto the canvas strip by strip, so each band it finishes replaces
+  // the blurred one under it and the rest of the picture stays up.
+  present(view) {
+    if (this.lost || !this.passTex) return;
+    const { width: w, height: h } = this.canvas;
+    const lo = { x: 0.5 / this.texW, y: 0.5 / this.texH };
+    const hi = { x: (this.texW - 0.5) / this.texW, y: (this.texH - 0.5) / this.texH };
+    this.blitPass(
+      { x: (lo.x + hi.x) / 2, y: (lo.y + hi.y) / 2 },
+      { x: (hi.x - lo.x) / w, y: 0 },
+      { x: 0, y: (hi.y - lo.y) / h },
+    );
+    this.passView = {
+      set: view.set,
+      julia: juliaKey(view),
+      palette: this.palette,
+      cam: view.cam.clone(),
+      angle: view.angle ?? 0,
+    };
+    this.fencePass();
+  }
+
+  // Marks the end of the work just issued, so a later frame can ask whether the
+  // GPU is through it without waiting on the answer.
+  fencePass() {
+    const gl = this.gl;
+    if (this.passSync) gl.deleteSync(this.passSync);
+    this.passSync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    this.passAt = performance.now();
+    gl.flush();
+  }
+
+  // Whether the GPU has finished the pass last presented. Anything issued now
+  // queues behind it, so a frame asked for while this is false reaches the
+  // screen no sooner than that pass does.
+  passDone() {
+    if (this.lost || !this.passSync) return true;
+    const gl = this.gl;
+    const waiting = gl.clientWaitSync(this.passSync, 0, 0) === gl.TIMEOUT_EXPIRED;
+    if (waiting && performance.now() - this.passAt < LATE_MS) return false;
+    gl.deleteSync(this.passSync);
+    this.passSync = null;
+    return true;
+  }
+
+  // Puts the presented pass back on the canvas where the camera now stands:
+  // the same picture, scaled, turned and shifted by the move made since it was
+  // drawn. It says nothing new about the set, so it only stands in for a frame
+  // the GPU has no room to draw yet.
+  reproject(view) {
+    const p = this.passView;
+    if (this.lost || !p || !this.passTex) return false;
+    if (p.set !== view.set || p.palette !== this.palette || p.julia !== juliaKey(view)) return false;
+    const dlz = view.cam.lz - p.cam.lz;
+    if (!(Math.abs(dlz) < REPROJECT_LZ)) return false;
+    // The centre's move, in stage pixels at the zoom the pass was drawn at.
+    const z = 2 ** dlz;
+    const off = view.cam.offsetFrom(p.cam);
+    const d = { x: off.x / z, y: off.y / z };
+    if (!(Math.abs(d.x) < REPROJECT_STAGE && Math.abs(d.y) < REPROJECT_STAGE)) return false;
+
+    // That move turned onto the pass's own screen axes, then into its texels.
+    const ca = Math.cos(p.angle);
+    const sa = Math.sin(p.angle);
+    const texel = this.texH / STAGE_HEIGHT;
+    const ox = (d.x * ca - d.y * sa) * texel;
+    const oy = (d.x * sa + d.y * ca) * texel;
+    // What one canvas pixel is worth in the pass, and the turn made since.
+    const g = (this.texH / this.canvas.height) / z;
+    const da = (view.angle ?? 0) - p.angle;
+    const cd = Math.cos(da) * g;
+    const sd = Math.sin(da) * g;
+    this.blitPass(
+      { x: 0.5 + ox / this.texW, y: 0.5 + oy / this.texH },
+      { x: cd / this.texW, y: -sd / this.texH },
+      { x: sd / this.texW, y: cd / this.texH },
+    );
+    return true;
   }
 
   ensureReference(view, iters, screenPx) {
@@ -238,6 +342,7 @@ export class Renderer {
     const h = Math.max(1, Math.round(this.canvas.height * scale));
     this.passW = w;
     this.passH = h;
+    this.passScale = scale;
     if (scale < 1) {
       this.passTarget(w, h);
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.passFbo);
@@ -376,6 +481,7 @@ export class Renderer {
     const qs = this.queries;
     const name = this.passName;
     const cost = this.passCost;
+    this.timedScale = this.passScale;
     this.queries = [];
     this.timing = this.pollQueries(qs)
       .then((ms) => {

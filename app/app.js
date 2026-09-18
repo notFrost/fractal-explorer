@@ -265,15 +265,14 @@ const SETTLE_MS = 120;
 let settled = false;
 let afterSettle = null;
 let settleTimer = 0;
-let wheelAt = 0;
 
 // The view is moving while a finger or the mouse is down, while a movement key
-// other than Shift is held, through a dive, and for a moment after the last
-// wheel notch. Frames drawn then stop at the coarse pass.
+// other than Shift is held, through a dive, and along the wheel's glide.
+// Frames drawn then stop at the coarse pass.
 const moving = () => pointers.size > 0
   || [...keys].some((k) => k !== 'shift')
   || Boolean(flight)
-  || performance.now() - wheelAt < SETTLE_MS;
+  || Boolean(zoomGlide);
 
 // A frame that stopped at the coarse pass leaves nothing to bring the full one
 // back, so it asks for another once the view has had time to stop. Further
@@ -313,6 +312,18 @@ function render() {
   paintPlane();
   scheduleHash();
 
+  // A pass asked for while the last one is still on the GPU would reach the
+  // screen no sooner than that one does, and the wait grows with every frame
+  // that queues another. So while the view moves, such a frame shows the last
+  // pass moved to where the camera now stands instead. It says nothing new
+  // about the set, but it holds the picture under the hand.
+  if (moving() && !renderer.passDone() && renderer.reproject(view)) {
+    hud.status.textContent = `${canvas.width}×${canvas.height} · ${tierLabel()} · waiting on the GPU`;
+    settleSoon();
+    requestRender();
+    return;
+  }
+
   const coarse = renderer.coarseScale(view);
   const scales = coarse < 1 ? [coarse, 1] : [1];
   const size = `${canvas.width}×${canvas.height}`;
@@ -329,11 +340,14 @@ function render() {
 
   const finish = () => {
     settled = true;
+    clearTimeout(settleTimer);
     const refNote = renderer.refCpuMs > 1 ? ` · ref ${Math.round(renderer.refCpuMs)} ms` : '';
     const stripNote = strips > 1 ? ` · ${strips} strips` : '';
     hud.status.textContent = `${size} · ${label}${stripNote}${refNote}`;
     renderer.gpuTime().then((ms) => {
-      if (seq !== frameSeq || ms === null) return;
+      // A coarse pass measured mid-move can still be in flight here, and its
+      // milliseconds are not this pass's to show.
+      if (seq !== frameSeq || ms === null || renderer.timedScale < 1) return;
       hud.status.textContent = `${size} · ${label} · GPU ${ms < 1 ? ms.toFixed(2) : ms.toFixed(1)} ms${stripNote}${refNote}`;
     });
     const waiting = afterSettle;
@@ -354,8 +368,12 @@ function render() {
       return;
     }
     if (scales[pass] < 1) {
-      renderer.present();
+      renderer.present(view);
       if (moving()) {
+        // A coarse pass is timed like any other, so the scale the next one
+        // picks answers to what this machine has just drawn rather than to
+        // whatever the last full pass cost, minutes and a tier ago.
+        renderer.gpuTime();
         hud.status.textContent = `${size} · ${label} · 1/${Math.round(1 / coarse)} scale`;
         settleSoon();
         return;
@@ -521,7 +539,7 @@ function parseLocation(text) {
 
 // Moves the camera. Returns an error string, or null when it went.
 function goTo(loc) {
-  cancelDive();
+  cancelDrift();
   const lz = loc.lz === undefined ? state.cam.lz : loc.lz;
   if (!Number.isFinite(lz)) return 'could not read the zoom';
   const angle = loc.angle === undefined ? state.angle : loc.angle;
@@ -1042,7 +1060,7 @@ function leaveEditor() {
 }
 
 function showEditor() {
-  cancelDive();
+  cancelDrift();
   keys.clear();
   frameSeq++;
   settled = false;
@@ -1354,7 +1372,7 @@ window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (movementKeys.has(k)) {
     e.preventDefault();
-    cancelDive();
+    cancelDrift();
     if (keys.has(k)) return;
     keys.add(k);
     startMotion();
@@ -1407,11 +1425,11 @@ function stageOffset(px, py) {
   };
 }
 
-// Zoom keeping the world point under (px, py) fixed.
-function zoomAt(px, py, factor) {
+// Zoom by dlz doublings, keeping the world point under (px, py) fixed.
+function zoomAt(px, py, dlz) {
   const { sx, sy } = stageOffset(px, py);
   const d = worldDelta(sx, sy);
-  const target = clampLogZoom(state.cam.lz + Math.log2(factor));
+  const target = clampLogZoom(state.cam.lz + dlz);
   state.cam.zoomAt(d.x, d.y, target - state.cam.lz);
   requestRender();
 }
@@ -1431,11 +1449,59 @@ function turnBy(from, to) {
   setAngle(state.angle + to - from);
 }
 
+// deltaY counts pixels on most setups, lines in Firefox and pages on a few.
+// One notch of a mouse wheel is 100 pixels, three lines or one page.
+const wheelNotches = (e) => e.deltaY / (e.deltaMode === 1 ? 3 : e.deltaMode === 2 ? 1 : 100);
+
+// How fast the view closes on the zoom the notches have asked for: the gap
+// left falls to 1/e of itself over this many seconds.
+const GLIDE_TAU = 0.07;
+
+// A notch asks for a fixed step and a mouse sends them far apart, so landing
+// on each one in the frame it arrives makes the zoom a staircase, both in what
+// it shows and in when it shows it. The view eases toward the total the
+// notches have asked for instead, about the point they were aimed at.
+let zoomGlide = null;
+
+function glideZoom(px, py, dlz) {
+  if (stillFrames.matches) {
+    zoomAt(px, py, dlz);
+    return;
+  }
+  const running = Boolean(zoomGlide);
+  zoomGlide = { px, py, left: (zoomGlide?.left ?? 0) + dlz, at: performance.now() };
+  if (!running) requestAnimationFrame(glideStep);
+}
+
+function glideStep(now) {
+  const g = zoomGlide;
+  if (!g || mode !== 'view') {
+    zoomGlide = null;
+    return;
+  }
+  // The frame's timestamp can predate the notch that started the glide.
+  const dt = Math.min(0.1, Math.max(0, (now - g.at) / 1000));
+  g.at = now;
+  const step = Math.abs(g.left) < 1e-3 ? g.left : g.left * (1 - Math.exp(-dt / GLIDE_TAU));
+  if (step) {
+    const was = state.cam.lz;
+    g.left -= step;
+    zoomAt(g.px, g.py, step);
+    // Against the set's ceiling or the floor, there is nowhere left to go.
+    if (state.cam.lz === was) g.left = 0;
+  }
+  if (!g.left) {
+    zoomGlide = null;
+    requestRender();
+    return;
+  }
+  requestAnimationFrame(glideStep);
+}
+
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   cancelDive();
-  wheelAt = performance.now();
-  zoomAt(e.clientX, e.clientY, Math.pow(1.2, -e.deltaY / 100));
+  glideZoom(e.clientX, e.clientY, -wheelNotches(e) * STEP_LZ);
 }, { passive: false });
 
 const pointers = new Map();
@@ -1445,7 +1511,7 @@ let pinch = null;
 const fingerBearing = (a, b) => Math.atan2(a.y - b.y, b.x - a.x) / DEGREE;
 
 canvas.addEventListener('pointerdown', (e) => {
-  cancelDive();
+  cancelDrift();
   try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   canvas.classList.add('dragging');
@@ -1473,7 +1539,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (pointers.size === 2 && pinch) {
     const [a, b] = [...pointers.values()];
     const d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (d > 0 && pinch.dist > 0) zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, d / pinch.dist);
+    if (d > 0 && pinch.dist > 0) zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, Math.log2(d / pinch.dist));
     const bearing = fingerBearing(a, b);
     if (d > 0) turnBy(pinch.bearing, bearing);
     pinch.dist = d;
@@ -1513,6 +1579,14 @@ let flight = null;
 const cancelDive = () => {
   flight = null;
   if (afterSettle === dive) afterSettle = null;
+};
+
+// A dive and the wheel's glide both move the camera with no hand on it, so
+// anything else that takes the camera stops them both. The wheel itself only
+// stops the dive: its own notches add to the glide already running.
+const cancelDrift = () => {
+  cancelDive();
+  zoomGlide = null;
 };
 
 // Stage-pixel offset of a point in the frame from the centre of the frame.
@@ -1675,7 +1749,7 @@ function bookmarkCamera(b) {
 }
 
 function showViewer(set, view) {
-  cancelDive();
+  cancelDrift();
   if (set === 'custom' && !hasCustom()) {
     showEditor();
     return;
@@ -1702,7 +1776,7 @@ function showViewer(set, view) {
       const y = Number(b.y);
       el.textContent = `${fmt(x)}${y < 0 ? ' − ' : ' + '}${fmt(Math.abs(y))}i @ ${fmtZoom(parseZoom(b.zoom))}`;
       el.addEventListener('click', () => {
-        cancelDive();
+        cancelDrift();
         state.cam = bookmarkCamera(b);
         requestRender();
       });
@@ -1719,7 +1793,7 @@ function leaveViewer() {
 }
 
 function showMenu() {
-  cancelDive();
+  cancelDrift();
   keys.clear();
   frameSeq++;
   settled = false;

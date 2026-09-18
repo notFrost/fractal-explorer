@@ -4,18 +4,22 @@ void main() {
   gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
-// Puts a finished pass on the canvas. A coarse pass holds fewer pixels than
-// the canvas has, so the sample points run between the centres of its first
-// and last texels and the bilinear filter spreads it up to size.
+// Puts a pass on the canvas under an affine map from canvas pixels to the
+// pass's texels: u_org is the texel at the centre of the canvas, u_mx and u_my
+// how far the read moves per pixel across and up. present() sets a map that
+// spreads a coarse pass to size, reproject() one that also carries the move the
+// camera has made since the pass was drawn.
 export const BLIT = `#version 300 es
 precision highp float;
 uniform sampler2D u_src;
 uniform vec2 u_dst;
-uniform vec2 u_lo;
-uniform vec2 u_hi;
+uniform vec2 u_org;
+uniform vec2 u_mx;
+uniform vec2 u_my;
 out vec4 outColor;
 void main() {
-  outColor = texture(u_src, mix(u_lo, u_hi, gl_FragCoord.xy / u_dst));
+  vec2 q = gl_FragCoord.xy - 0.5 * u_dst;
+  outColor = texture(u_src, u_org + u_mx * q.x + u_my * q.y);
 }`;
 
 export const COMMON = `#version 300 es
