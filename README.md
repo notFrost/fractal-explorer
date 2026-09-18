@@ -2,10 +2,10 @@
 
 **[Live demo](https://fractal-explorer-six.vercel.app/app/)**
 
-A web port of a PenguinMod project (`FractalExplorer.pmp`). Eight escape-time
+A web port of a PenguinMod project (`FractalExplorer.pmp`). Nine escape-time
 sets drawn on the GPU with WebGL2 fragment shaders, plus any number built from
 a formula you type and save to the menu. Cards drag into any order you like,
-and into folders you name. Seven of them zoom without a precision limit; Pacman stops at
+and into folders you name. Eight of them zoom without a precision limit; Pacman stops at
 2^40. The original's camera model, pen colours, and controls carry over; the
 CPU pen-plotting does not.
 
@@ -175,10 +175,11 @@ and then scaled by the HUD slider, to 100 000 at the most, and the reference
 orbit costs about 90 ms at 10^300. At 10^300 a 1280×800 frame is roughly 80 strips and
 under a second on an RTX 2060.
 
-**Webb**, **Collatz**, **Julia**, **Burning Ship**, **MandelBug** and **The
-Octopus** iterate directly in float32 up to 10^6 zoom and use the same three
-tiers beyond it, with their own reference orbits and shaders. **Pacman** is
-perturbed at every zoom, like Mandelbrot, but has only the first tier.
+**Webb**, **Collatz**, **Julia**, **Burning Ship**, **Perpendicular Ship**,
+**MandelBug** and **The Octopus** iterate directly in float32 up to 10^6 zoom
+and use the same three tiers beyond it, with their own reference orbits and
+shaders. **Pacman** is perturbed at every zoom, like Mandelbrot, but has only
+the first tier.
 
 Webb's two-term recurrence carries a delta on both terms,
 `d ← (2Z + d) d + e, e ← d`. The map has no critical point, so the delta never
@@ -216,6 +217,23 @@ exact differences, expanding the square gives
 `di ← 2(|Zr| b + |Zi| a + a b) − dci`. The minus on `dci` is the original's:
 it iterates `z ← (|Re z| + i|Im z|)² + c̄`, conjugating `c` so the ship stands
 upright on a y-up stage, and the port keeps that rather than correcting it.
+
+Perpendicular Ship folds the imaginary part alone, `z ← (Re z − i|Im z|)² + c`,
+and leaves `c` unconjugated. Each step is one of two maps, picked by the side of
+the axis the orbit is on. Below it `−i|Im z| = i Im z`, so the value squared is
+`z` and the step is Mandelbrot's; above it the value is `conj(z)` and the step
+is the Mandelbar's. The delta is a square's, `d ← (2V + v) v + dc`, where
+`V = Re Z − i|Im Z|` and `v` is the delta on it. Its real part is `dr`, and its
+imaginary part is the Burning Ship's exact `|Zi + di| − |Zi|` negated, so
+nothing cancels. `Z₀ = 0`, so the rebasing is Mandelbrot's unchanged, and all
+three tiers follow.
+
+On the real axis `Im z` starts at zero and stays there, so the map is the real
+Mandelbrot and the set holds the whole of `[−2, 0.25]`. Off the axis it has no
+symmetry. The bulk sits below, reaching `Re c ≈ −1.05` and `Im c ≈ −1.02`. Above
+the axis the set lies right of `Re c ≈ 0.14` and rises to `Im c ≈ 1.19`, and its
+rightmost point, `Re c ≈ 1.045`, is up there at `Im c ≈ 1.10` rather than on the
+axis.
 
 MandelBug is Mandelbrot with the imaginary part mistyped: `2 Zr Zi` written as
 `2(Zr + Zi)`. The real part of the delta is then Mandelbrot's own,
@@ -535,10 +553,11 @@ same `#saved2@` link and the same place in the menu. On a built-in set it is a
 line to start from rather than a change to the set itself. Mandelbrot stays
 Mandelbrot, and Save adds what you made beside it.
 
-Six of the eight built-in sets are written out for the editor. Mandelbrot is
+Seven of the nine built-in sets are written out for the editor. Mandelbrot is
 `z^2 + c`. Julia is the same line with `z₀ = x+yi` and `c` held at
 `-0.74543+0.11301i`. Burning Ship is `(|re(z)| + i|im(z)|)^2 + conj(c)`,
-MandelBug is `re(z^2) + 2i(re(z) + im(z)) + c`, Pacman is
+Perpendicular Ship is `(re(z) - i|im(z)|)^2 + c`, MandelBug is
+`re(z^2) + 2i(re(z) + im(z)) + c`, Pacman is
 `re(z)^2 - im(z^2+c)^2 + re(c) + i*im(z^2+c)`, and The Octopus is
 `(re(z) + im(c) + i(|im(z)| - re(c)))^2 + c`. Any copy iterates in float32
 like a typed formula, so it stops at 10⁶ zoom where the original hands over to

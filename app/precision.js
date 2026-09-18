@@ -379,6 +379,52 @@ export function shipOrbitBig(cx, cy, bits, maxIter, out, cont = null) {
   return { len: n, escaped: false, zr, zi };
 }
 
+// Perpendicular Burning Ship: z ← (Re z − i|Im z|)² + c, i.e.
+// Zr' = Zr² − Zi² + Cr, Zi' = −2 Zr |Zi| + Ci. Only the imaginary part is
+// folded, and c enters unconjugated. Z_0 = 0 as in Mandelbrot. Texel: (Z, 0, 0).
+export function perpOrbitDouble(cx, cy, maxIter, out) {
+  let zr = 0;
+  let zi = 0;
+  out[0] = 0;
+  out[1] = 0;
+  let n = 1;
+  for (let i = 0; i < maxIter; i++) {
+    const nr = zr * zr - zi * zi + cx;
+    zi = -2 * zr * Math.abs(zi) + cy;
+    zr = nr;
+    out[STRIDE * n] = zr;
+    out[STRIDE * n + 1] = zi;
+    n++;
+    if (zr * zr + zi * zi > 1e10) return { len: n, escaped: true };
+  }
+  return { len: n, escaped: false, zr, zi };
+}
+
+export function perpOrbitBig(cx, cy, bits, maxIter, out, cont = null) {
+  const B = BigInt(bits);
+  const bail = 10_000_000_000n << (2n * B);
+  let zr = cont ? cont.zr : 0n;
+  let zi = cont ? cont.zi : 0n;
+  let n = cont ? cont.len : 1;
+  if (!cont) {
+    out[0] = 0;
+    out[1] = 0;
+  }
+  const shift = bits > 60 ? BigInt(bits - 60) : 0n;
+  const div = bits > 60 ? B60 : 2 ** bits;
+  while (n < maxIter + 1) {
+    const nr = ((zr * zr - zi * zi) >> B) + cx;
+    const ai = zi < 0n ? -zi : zi;
+    zi = -((zr * ai) >> (B - 1n)) + cy;
+    zr = nr;
+    out[STRIDE * n] = Number(zr >> shift) / div;
+    out[STRIDE * n + 1] = Number(zi >> shift) / div;
+    n++;
+    if (zr * zr + zi * zi > bail) return { len: n, escaped: true };
+  }
+  return { len: n, escaped: false, zr, zi };
+}
+
 // MandelBug: Mandelbrot with a bug in the imaginary part, where 2·Zr·Zi was
 // written 2(Zr + Zi). So Zr' = Zr² − Zi² + Cr, Zi' = 2(Zr + Zi) + Ci, with
 // Z_0 = 0 as in Mandelbrot. Texel: (Z, 0, 0).
@@ -678,5 +724,6 @@ export const ORBITS = {
   mandelbug: { double: bugOrbitDouble, big: bugOrbitBig, stride: 1, iters: (n) => n },
   pacman: { double: pacmanOrbitDouble, big: null, stride: 1, iters: (n) => n },
   octopus: { double: octopusOrbitDouble, big: octopusOrbitBig, stride: 1, iters: (n) => n },
+  perpendicularship: { double: perpOrbitDouble, big: perpOrbitBig, stride: 1, iters: (n) => n },
   custom: { double: null, big: null, stride: 1, iters: (n) => n },
 };
