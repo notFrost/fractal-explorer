@@ -136,7 +136,11 @@
         <div class="hud-row hud-c"><span class="hud-k">c</span> <button id="hud-c" class="hud-edit" type="button" title="Edit the coordinate (G)">0 + 0i</button></div>
         <div class="hud-row"><span class="hud-k">zoom</span> <button id="hud-zoom" class="hud-edit" type="button" title="Edit the zoom (G)">100×</button></div>
         <div class="hud-row"><span class="hud-k">rot</span> <button id="hud-angle" class="hud-edit" type="button" title="Edit the rotation (G). Z and X turn it, R levels it">0°</button></div>
-        <div class="hud-row"><span class="hud-k">iter</span> <span id="hud-iter">200</span> <span class="hud-dim">detail ×<span id="hud-detail">1</span></span></div>
+        <div class="hud-row"><span class="hud-k">iter</span> <span id="hud-iter">200</span>
+          <button id="iter-mode" class="iter-mode" type="button">auto</button>
+          <span id="hud-detail" class="hud-dim">×1</span></div>
+        <input id="iter-slider" class="iter-slider" type="range" min="32" max="133" step="1" value="61"
+               aria-label="Iteration count" title="Iteration count ( [ and ] )" />
         <div class="hud-row hud-dim"><span id="hud-status">idle</span></div>
         <div id="palettes" class="hud-row palette-groups" aria-label="Colourway"></div>
 
@@ -181,8 +185,6 @@
                 stroke-width="1" opacity="0.45"/>
         </svg>
       </button>
-      <button id="detail-down" class="cbtn" type="button" title="Fewer iterations ( [ )" aria-label="Fewer iterations">◔</button>
-      <button id="detail-up" class="cbtn" type="button" title="More iterations ( ] )" aria-label="More iterations">●</button>
       <button id="dive" class="cbtn" type="button" title="Dive into a random spot (F)" aria-label="Dive into a random spot">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
           <rect x="3.5" y="3.5" width="17" height="17" rx="4" fill="none" stroke="currentColor" stroke-width="1.6"/>
@@ -210,7 +212,7 @@
       </button>
     </div>
 
-    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · Z X turn, R levels · [ ] detail · , . colour · P the plane · H folds the panel · G or paste to go somewhere · F dives somewhere new · V animates · Space saves</p>
+    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · Z X turn, R levels · [ ] iterations, I fixes them · , . colour · P the plane · H folds the panel · G or paste to go somewhere · F dives somewhere new · V animates · Space saves</p>
 
     <section id="timeline" class="timeline panel" hidden aria-label="Animation timeline">
       <div class="tl-bar">

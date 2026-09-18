@@ -91,7 +91,8 @@ body.viewing { overflow: hidden; }
   pointer-events: none;
 }
 
-/* Control bar: iteration detail down/up and screenshot. Same on every device. */
+/* Control bar: the plane, a dive, the timeline and a screenshot. Same on
+   every device. */
 
 .controls {
   position: absolute;

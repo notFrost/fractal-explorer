@@ -51,6 +51,23 @@
 .palette-group-name { color: var(--dim); }
 .palette-chips { display: flex; flex-wrap: wrap; gap: 0.15rem 0.5rem; }
 
+/* Iterations: the count and its mode on one line, the slider under them. The
+   slider is logarithmic, so a drag crosses the whole budget. */
+.iter-slider {
+  width: 100%;
+  margin: 0.1rem 0 0.25rem;
+  accent-color: var(--magenta);
+  cursor: pointer;
+}
+
+.iter-mode {
+  color: var(--dim);
+  border-bottom: 1px dotted var(--dim);
+}
+
+.iter-mode:hover { color: var(--ink); border-color: var(--ink); }
+.iter-mode[data-mode="fixed"] { color: var(--magenta); border-color: var(--magenta); }
+
 /* The coordinate and zoom lines open the go-to form. */
 .hud-edit {
   text-align: left;

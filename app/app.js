@@ -1,4 +1,4 @@
-import { SETS, MIN_LOG_ZOOM, iterationsFor } from './fractals.js';
+import { SETS, MIN_LOG_ZOOM, MIN_ITER, iterationsFor, baseIterations, iterCeiling } from './fractals.js';
 import { Camera, formatZoom } from './precision.js';
 import { Renderer } from './gpu.js';
 import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palettes.js';
@@ -17,7 +17,11 @@ import { prune as pruneAnimations } from './keyframes.js';
 const state = {
   set: 'mandelbrot',
   cam: new Camera(0, 0, 100),
+  // Iterations either follow the zoom, the budget times this multiplier, or
+  // hold at the count in fixedIter. The slider writes to whichever is live.
+  iterMode: 'auto',
   detail: 1,
+  fixedIter: 1000,
   // Degrees the view is turned anticlockwise. Rides in the URL as ?angle=.
   angle: 0,
   // Julia's parameter, kept as the strings the user typed so the hash
@@ -50,6 +54,8 @@ const hud = {
   angle: $('#hud-angle'),
   iter: $('#hud-iter'),
   detail: $('#hud-detail'),
+  iterSlider: $('#iter-slider'),
+  iterMode: $('#iter-mode'),
   status: $('#hud-status'),
   bookmarks: $('#bookmarks'),
 };
@@ -109,7 +115,11 @@ try {
   preview.box.hidden = true;
 }
 
-const iterNow = () => iterationsFor(state.cam.lz, state.detail, state.set);
+const clampIter = (n) => Math.max(MIN_ITER, Math.min(iterCeiling(state.set), Math.round(n)));
+
+const iterNow = () => (state.iterMode === 'fixed'
+  ? clampIter(state.fixedIter)
+  : iterationsFor(state.cam.lz, state.detail, state.set));
 
 // Everything a frame needs: which set, where, how hard, and Julia's C. The
 // thumbnails and the Julia map pass no angle and stay upright.
@@ -179,8 +189,11 @@ function updateHud() {
   hud.c.title = state.cam.lz < 40 ? 'Edit the coordinate (G)' : `${state.cam.xString()}\n${state.cam.yString()}`;
   hud.zoom.textContent = formatZoom(state.cam.lz);
   hud.angle.textContent = `${Number(state.angle.toFixed(1))}°`;
-  hud.iter.textContent = String(iterNow());
-  hud.detail.textContent = String(state.detail);
+  const iters = iterNow();
+  hud.iter.textContent = String(iters);
+  hud.iterSlider.value = String(notchOf(iters));
+  hud.detail.textContent = `×${Number(state.detail.toPrecision(2))}`;
+  hud.detail.hidden = state.iterMode === 'fixed';
 }
 
 // The URL is updated after input settles, never per frame.
@@ -273,6 +286,7 @@ const moving = () => pointers.size > 0
   || [...keys].some((k) => k !== 'shift')
   || Boolean(flight)
   || Boolean(zoomGlide)
+  || scrubbingIter
   || Boolean(studio?.playing);
 
 // A frame that stopped at the coarse pass leaves nothing to bring the full one
@@ -1407,8 +1421,9 @@ window.addEventListener('keydown', (e) => {
   }
   if (k === ' ') { e.preventDefault(); savePng(); }
   if (k === 'escape') (goto.form.hidden ? leaveViewer : closeGoto)();
-  if (k === '[') changeDetail(-1);
-  if (k === ']') changeDetail(1);
+  if (k === '[') nudgeIter(-NOTCHES);
+  if (k === ']') nudgeIter(NOTCHES);
+  if (k === 'i') setIterMode(state.iterMode === 'fixed' ? 'auto' : 'fixed');
   if (k === ',') stepPalette(-1);
   if (k === '.') stepPalette(1);
   if (k === 'h') setHud(!hudOpen);
@@ -1423,12 +1438,74 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 window.addEventListener('blur', () => keys.clear());
 
-function changeDetail(dir) {
-  const steps = [1, 2, 4, 8];
-  const i = Math.max(0, Math.min(steps.length - 1, steps.indexOf(state.detail) + dir));
-  state.detail = steps[i];
+// ---------- Iterations ----------
+//
+// The slider always reads as a count, and the mode decides what a drag writes
+// to. Fixed writes the count itself, which then stays whatever the zoom does.
+// Auto writes the multiplier on the budget the zoom asks for. Either way the
+// count carries across a swap, so the picture does not jump when the mode
+// changes.
+//
+// Positions run logarithmically, NOTCHES of them to a doubling, so one drag
+// crosses the whole range from MIN_ITER to a set's ceiling.
+
+const NOTCHES = 8;
+const notchOf = (count) => Math.round(Math.log2(count) * NOTCHES);
+const countAt = (notch) => clampIter(2 ** (notch / NOTCHES));
+
+function setIterCount(count) {
+  const wanted = clampIter(count);
+  if (state.iterMode === 'fixed') state.fixedIter = wanted;
+  else state.detail = wanted / baseIterations(state.cam.lz);
   requestRender();
 }
+
+function nudgeIter(notches) {
+  setIterCount(countAt(notchOf(iterNow()) + notches));
+}
+
+function showIterMode() {
+  const mode = state.iterMode;
+  hud.iterMode.dataset.mode = mode;
+  hud.iterMode.textContent = mode;
+  hud.iterMode.title = mode === 'fixed'
+    ? 'The count stays where the slider puts it. Click to follow the zoom (I)'
+    : 'The count follows the zoom. Click to fix it where it stands (I)';
+}
+
+function setIterMode(mode) {
+  if (mode === state.iterMode) return;
+  const held = iterNow();
+  state.iterMode = mode;
+  showIterMode();
+  setIterCount(held);
+}
+
+// A set with a ceiling of its own, Collatz at 500, shortens the slider to it.
+function fitIterSlider() {
+  hud.iterSlider.min = String(notchOf(MIN_ITER));
+  hud.iterSlider.max = String(notchOf(iterCeiling(state.set)));
+}
+
+// A drag across the slider asks for a frame a pixel, which at the top of the
+// budget is more than any machine draws. So the thumb counts as movement. The
+// coarse pass runs while it moves and the full one waits for it to stop, the
+// way a pan does.
+let scrubbingIter = false;
+
+function endIterScrub() {
+  if (!scrubbingIter) return;
+  scrubbingIter = false;
+  requestRender();
+}
+
+showIterMode();
+
+hud.iterSlider.addEventListener('input', () => setIterCount(countAt(Number(hud.iterSlider.value))));
+hud.iterSlider.addEventListener('pointerdown', () => { scrubbingIter = true; });
+window.addEventListener('pointerup', endIterScrub);
+window.addEventListener('pointercancel', endIterScrub);
+hud.iterMode.addEventListener('click', () => setIterMode(state.iterMode === 'fixed' ? 'auto' : 'fixed'));
 
 // ---------- Pointer: drag, wheel, pinch ----------
 
@@ -1671,8 +1748,6 @@ function dive() {
 // ---------- Buttons ----------
 
 $('#dive').addEventListener('click', dive);
-$('#detail-down').addEventListener('click', () => changeDetail(-1));
-$('#detail-up').addEventListener('click', () => changeDetail(1));
 $('#save').addEventListener('click', savePng);
 backBtn.addEventListener('click', leaveViewer);
 window.addEventListener('resize', () => {
@@ -1774,6 +1849,7 @@ function showViewer(set, view) {
     return;
   }
   state.set = set;
+  fitIterSlider();
   if (view) state.cam = new Camera(view.x, view.y, view.zoom);
   mode = 'view';
   document.body.classList.add('viewing');
