@@ -237,13 +237,16 @@ function fitCanvas() {
 let renderQueued = false;
 let frameSeq = 0;
 
+// Renders fold into the next animation frame. A high-rate mouse sends
+// pointermove many times between refreshes, and each of those would otherwise
+// start a frame of its own.
 function requestRender() {
   if (renderQueued) return;
   renderQueued = true;
-  setTimeout(() => {
+  requestAnimationFrame(() => {
     renderQueued = false;
     render();
-  }, 0);
+  });
 }
 
 function tierLabel() {
@@ -255,46 +258,119 @@ function tierLabel() {
   }
 }
 
-// One frame. Cheap frames are one draw call; deep frames are drawn in strips
-// across successive animation frames so no draw call runs long enough to
-// trip the GPU watchdog. A newer frame cancels the strips of the old one.
+// How long after the last input the view counts as stopped.
+const SETTLE_MS = 120;
+
+// True once the full-size picture is on the canvas.
+let settled = false;
+let afterSettle = null;
+let settleTimer = 0;
+let wheelAt = 0;
+
+// The view is moving while a finger or the mouse is down, while a movement key
+// other than Shift is held, through a dive, and for a moment after the last
+// wheel notch. Frames drawn then stop at the coarse pass.
+const moving = () => pointers.size > 0
+  || [...keys].some((k) => k !== 'shift')
+  || Boolean(flight)
+  || performance.now() - wheelAt < SETTLE_MS;
+
+// A frame that stopped at the coarse pass leaves nothing to bring the full one
+// back, so it asks for another once the view has had time to stop. Further
+// input pushes that out again.
+function settleSoon() {
+  clearTimeout(settleTimer);
+  settleTimer = setTimeout(requestRender, SETTLE_MS);
+}
+
+function whenSettled(fn) {
+  if (settled) fn();
+  else afterSettle = fn;
+}
+
+// A frame drawn outside the view loop, a screenshot or the Julia map, leaves
+// the canvas holding something else. Drop what is running and draw the view.
+function redrawView() {
+  frameSeq++;
+  settled = false;
+  requestRender();
+}
+
+// One frame, in two passes. The coarse pass covers a fraction of the canvas
+// cheaply enough to land inside a frame, and present() spreads it to size. The
+// full pass then draws over it in strips short enough not to trip the GPU
+// watchdog, so each band sharpens in place instead of rising out of black.
+// While the view is moving the coarse pass is all that runs, and the strips
+// wait for it to stop. A newer frame cancels whatever is left of the old one.
 function render() {
   if (mode !== 'view' || !renderer) return;
   fitCanvas();
   state.cam.setLogZoom(clampLogZoom(state.cam.lz));
-  const maxIter = iterNow();
+  const view = viewNow();
   const seq = ++frameSeq;
-  const { strips } = renderer.begin(viewNow(maxIter));
+  settled = false;
   updateHud();
   paintPlane();
   scheduleHash();
-  const size = `${canvas.width}×${canvas.height}`;
-  const refNote = renderer.refCpuMs > 1 ? ` · ref ${Math.round(renderer.refCpuMs)} ms` : '';
 
-  const label = tierLabel();
-  const stripNote = strips > 1 ? ` · ${strips} strips` : '';
+  const coarse = renderer.coarseScale(view);
+  const scales = coarse < 1 ? [coarse, 1] : [1];
+  const size = `${canvas.width}×${canvas.height}`;
+  let pass = 0;
+  let strips = 1;
+  let i = 0;
+  let label = '';
+
+  const startPass = () => {
+    strips = renderer.begin(view, true, scales[pass]).strips;
+    label = tierLabel();
+    i = 0;
+  };
+
   const finish = () => {
+    settled = true;
+    const refNote = renderer.refCpuMs > 1 ? ` · ref ${Math.round(renderer.refCpuMs)} ms` : '';
+    const stripNote = strips > 1 ? ` · ${strips} strips` : '';
     hud.status.textContent = `${size} · ${label}${stripNote}${refNote}`;
     renderer.gpuTime().then((ms) => {
       if (seq !== frameSeq || ms === null) return;
       hud.status.textContent = `${size} · ${label} · GPU ${ms < 1 ? ms.toFixed(2) : ms.toFixed(1)} ms${stripNote}${refNote}`;
     });
+    const waiting = afterSettle;
+    afterSettle = null;
+    waiting?.();
   };
 
-  let i = 0;
   const step = () => {
     if (seq !== frameSeq || mode !== 'view') return;
-    // Uniforms may have been replaced by a thumbnail or export; re-issue them.
-    if (i > 0) renderer.begin(viewNow(maxIter), false);
+    // A thumbnail, an export or the Julia map may have drawn between frames and
+    // left its own uniforms behind, so every strip re-issues this pass's.
+    renderer.begin(view, false, scales[pass]);
     renderer.drawStrip(i, strips);
     i++;
     if (i < strips) {
-      hud.status.textContent = `${size} · ${label} · strip ${i}/${strips}${refNote}`;
+      hud.status.textContent = `${size} · ${label} · strip ${i}/${strips}`;
       requestAnimationFrame(step);
-    } else {
-      finish();
+      return;
     }
+    if (scales[pass] < 1) {
+      renderer.present();
+      if (moving()) {
+        hud.status.textContent = `${size} · ${label} · 1/${Math.round(1 / coarse)} scale`;
+        settleSoon();
+        return;
+      }
+    }
+    pass++;
+    if (pass === scales.length) {
+      finish();
+      return;
+    }
+    startPass();
+    requestAnimationFrame(step);
   };
+
+  startPass();
   step();
 }
 
@@ -329,8 +405,7 @@ function savePng() {
   }, 'image/png');
   canvas.width = w;
   canvas.height = h;
-  frameSeq++;
-  requestRender();
+  redrawView();
 }
 
 // ---------- The complex plane ----------
@@ -634,8 +709,7 @@ function drawMapImage(w, h) {
   mapImage.height = h;
   mapImage.getContext('2d').drawImage(canvas, 0, 0);
   mapKey = key;
-  frameSeq++;
-  requestRender();
+  redrawView();
   return true;
 }
 
@@ -971,6 +1045,7 @@ function showEditor() {
   cancelDive();
   keys.clear();
   frameSeq++;
+  settled = false;
   mode = 'editor';
   document.body.classList.remove('viewing');
   viewer.hidden = true;
@@ -1359,6 +1434,7 @@ function turnBy(from, to) {
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   cancelDive();
+  wheelAt = performance.now();
   zoomAt(e.clientX, e.clientY, Math.pow(1.2, -e.deltaY / 100));
 }, { passive: false });
 
@@ -1434,7 +1510,10 @@ const stillFrames = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 let flight = null;
 
-const cancelDive = () => { flight = null; };
+const cancelDive = () => {
+  flight = null;
+  if (afterSettle === dive) afterSettle = null;
+};
 
 // Stage-pixel offset of a point in the frame from the centre of the frame.
 // The rows come back from the GPU bottom up, so its y already points up.
@@ -1460,6 +1539,13 @@ function dive() {
   const gain = clampLogZoom(state.cam.lz + DIVE_GAIN) - state.cam.lz;
   if (gain < LEAST_GAIN) {
     hud.status.textContent = 'as deep as this set goes';
+    return;
+  }
+  // The spot is weighted by how far one pixel stands from the next, which the
+  // coarse pass has blurred away, so the pick waits for the full-size picture.
+  if (!settled) {
+    hud.status.textContent = 'waiting for the full picture…';
+    whenSettled(dive);
     return;
   }
   const frame = renderer.framePixels();
@@ -1636,6 +1722,7 @@ function showMenu() {
   cancelDive();
   keys.clear();
   frameSeq++;
+  settled = false;
   mode = 'menu';
   document.body.classList.remove('viewing');
   viewer.hidden = true;
