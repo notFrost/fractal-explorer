@@ -20,5 +20,5 @@ float escape(vec2 dc) {
 
 void main() {
   vec2 dc = (viewPixel() + u_offset) * u_px;
-  outColor = vec4(palette(escape(dc)), 1.0);
+  outColor = shade(escape(dc));
 }`;

@@ -60,7 +60,7 @@ vec2 pixelPoint() { return u_center + viewPixel() * u_px; }
 export function customBody(parts) {
   return escapeLib(parts) + `
 void main() {
-  outColor = vec4(palette(escape(pixelPoint())), 1.0);
+  outColor = shade(escape(pixelPoint()));
 }`;
 }
 

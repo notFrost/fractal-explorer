@@ -19,11 +19,8 @@ float escape(vec2 dc) {
 
 void main() {
   vec2 px = viewPixel();
-  if (inCardioidOrBulb(u_center + px * u_px)) {
-    outColor = vec4(palette(0.0), 1.0);
-    return;
-  }
-  outColor = vec4(palette(escape((px + u_offset) * u_px)), 1.0);
+  bool inside = inCardioidOrBulb(u_center + px * u_px);
+  outColor = shade(inside ? 0.0 : escape((px + u_offset) * u_px));
 }`;
 
 export const MANDELBROT_FE = FE_LIB + `
@@ -48,9 +45,9 @@ float escape(FE dc) {
 
 void main() {
   if (inCardioidOrBulb(u_center)) {
-    outColor = vec4(palette(0.0), 1.0);
+    outColor = shade(0.0);
     return;
   }
   vec2 px = viewPixel() + u_offset;
-  outColor = vec4(palette(escape(fe(px * u_pxm, u_pxe))), 1.0);
+  outColor = shade(escape(fe(px * u_pxm, u_pxe)));
 }`;

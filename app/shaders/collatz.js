@@ -22,7 +22,7 @@ float escape(vec2 c) {
 
 void main() {
   vec2 c = u_center + viewPixel() * u_px;
-  outColor = vec4(palette(escape(c)), 1.0);
+  outColor = shade(escape(c));
 }`;
 
 export const COLLATZ_PERT = FE_LIB + `
@@ -97,5 +97,5 @@ float escape(FE dc) {
 
 void main() {
   vec2 px = viewPixel() + u_offset;
-  outColor = vec4(palette(escape(fe(px * u_pxm, u_pxe))), 1.0);
+  outColor = shade(escape(fe(px * u_pxm, u_pxe)));
 }`;
