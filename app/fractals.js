@@ -73,6 +73,13 @@ export const SETS = {
     edit: { formula: '(|re(z)| + i|im(z)|)^2 + conj(c)', seedZ: '0', seedC: 'x+yi' },
     bookmarks: [{ x: 0, y: 0, zoom: 100 }],
   },
+  perpendicularship: {
+    name: 'Perpendicular Ship',
+    formula: 'z ← (Re\u00a0z\u00a0−\u00a0i|Im\u00a0z|)² + c',
+    home: { x: -0.5, y: 0.1, zoom: 115 },
+    edit: { formula: '(re(z) - i|im(z)|)^2 + c', seedZ: '0', seedC: 'x+yi' },
+    bookmarks: [{ x: -0.74, y: -0.764, zoom: 30000 }],
+  },
   mandelbug: {
     name: 'MandelBug',
     formula: 'z ← Re(z²) + 2i(Re\u00a0z\u00a0+\u00a0Im\u00a0z) + c',
