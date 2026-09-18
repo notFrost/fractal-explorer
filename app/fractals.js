@@ -2,6 +2,7 @@
 
 export const MIN_LOG_ZOOM = Math.log2(10);
 export const MAX_ITER = 100000;
+export const MIN_ITER = 16;
 
 // The original's stage was 360 pixels tall and zoom counts stage pixels to the
 // world unit, so a view is this many world units tall whatever its size.
@@ -114,9 +115,16 @@ export const SETS = {
   },
 };
 
+// What the zoom alone asks for, before the user's multiplier.
+export function baseIterations(log2zoom) {
+  return Math.min(50000, Math.max(200, Math.round(30 * log2zoom)));
+}
+
+// The most a set will run. Collatz stops at 500; the rest stop at MAX_ITER.
+export const iterCeiling = (set) => Math.min(MAX_ITER, SETS[set]?.maxIter ?? MAX_ITER);
+
 // Budget grows with zoom depth; the detail multiplier is the user's override.
-// Sets with their own ceiling (Collatz stops at 500) clamp to it.
 export function iterationsFor(log2zoom, detail = 1, set = 'mandelbrot') {
-  const base = Math.min(50000, Math.max(200, Math.round(30 * log2zoom)));
-  return Math.min(MAX_ITER, SETS[set]?.maxIter ?? MAX_ITER, base * detail);
+  const wanted = Math.round(baseIterations(log2zoom) * detail);
+  return Math.max(MIN_ITER, Math.min(iterCeiling(set), wanted));
 }

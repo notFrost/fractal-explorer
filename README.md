@@ -45,7 +45,7 @@ root, so the portal reads the hash on load and forwards anything shaped like
 | Zoom | E in, Q out | wheel, pinch |
 | Rotate | Z counterclockwise, X clockwise, R levels it, Shift doubles speed | Shift and drag, two-finger twist |
 | Dive into a random spot in view | F | the die button |
-| Iterations (×1 ×2 ×4 ×8) | `[` and `]` | the two round buttons |
+| Iterations | `[` halves, `]` doubles, `I` swaps fixed and automatic | the slider under `iter` in the HUD |
 | Save PNG at twice screen size | Space | the camera button |
 | Back to the menu, or to the formula for a custom set | Esc | Menu button |
 | Go to a location | G, or paste | click the coordinate or zoom in the HUD |
@@ -56,6 +56,16 @@ root, so the portal reads the hash on load and forwards anything shaped like
 | Take a keyframe where the view stands | K | + Keyframe on the timeline |
 | Fold the HUD away | H | the `hud` toggle under the panel |
 | Move a card or folder on the menu | arrow keys, with its grip focused | drag the grip |
+
+The `iter` slider sets how many iterations a pixel gets, logarithmically, so
+one drag crosses the range from 16 to whatever the set's ceiling is. The word
+beside the count is the mode. Under **auto** the count follows the zoom,
+`30 × log2 zoom` times what the slider asks for, and that multiplier is the
+`×` after the count. Depth needs those iterations, because telling an
+escaping pixel from a captive one takes longer the finer the filament. Under
+**fixed** the count stays where the slider puts it, whatever the zoom does.
+`I` swaps the two, and the count carries across the swap, so the picture does
+not jump when the mode changes.
 
 The URL hash stores the set, centre, and zoom with as many digits as the zoom
 needs, so any view can be bookmarked or shared. Julia adds two fields for its
@@ -161,8 +171,8 @@ GLSL ES 3.00 lacks `frexp` and `ldexp`.
 
 There is no upper zoom limit in the code, bar Pacman's. In practice the cost
 grows with depth: the iteration budget is `30 × log2 zoom`, capped at 50 000
-(×8 with the detail buttons, capped at 100 000), and the reference orbit costs
-about 90 ms at 10^300. At 10^300 a 1280×800 frame is roughly 80 strips and
+and then scaled by the HUD slider, to 100 000 at the most, and the reference
+orbit costs about 90 ms at 10^300. At 10^300 a 1280×800 frame is roughly 80 strips and
 under a second on an RTX 2060.
 
 **Webb**, **Collatz**, **Julia**, **Burning Ship**, **MandelBug** and **The
