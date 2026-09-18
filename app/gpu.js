@@ -335,15 +335,15 @@ export class Renderer {
   // Sets a pass up and says how many strips it takes. `scale` is the fraction
   // of the canvas it covers: below 1 it draws into the offscreen target for
   // present() to spread, at 1 it draws straight onto the canvas.
-  begin(view, fresh = true, scale = 1) {
+  begin(view, fresh = true, scale = 1, size = null) {
     if (this.lost) return { strips: 0 };
     const gl = this.gl;
-    const w = Math.max(1, Math.round(this.canvas.width * scale));
-    const h = Math.max(1, Math.round(this.canvas.height * scale));
+    const w = size ? size.width : Math.max(1, Math.round(this.canvas.width * scale));
+    const h = size ? size.height : Math.max(1, Math.round(this.canvas.height * scale));
     this.passW = w;
     this.passH = h;
     this.passScale = scale;
-    if (scale < 1) {
+    if (size || scale < 1) {
       this.passTarget(w, h);
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.passFbo);
     } else {
@@ -431,6 +431,29 @@ export class Renderer {
   renderAll(view) {
     const { strips } = this.begin(view);
     for (let i = 0; i < strips; i++) this.drawStrip(i, strips);
+  }
+
+  // A small picture drawn away from the canvas, for a keyframe's thumbnail.
+  // Drawing it on the canvas would shrink the drawing buffer under a viewer
+  // that is still on screen, and the picture would blur and snap back every
+  // time a keyframe was taken. It borrows the coarse pass's target instead, so
+  // the pass held there is spent and reproject() stands in with nothing until
+  // the next frame draws.
+  offscreen(view, w, h) {
+    if (this.lost) return null;
+    const gl = this.gl;
+    const size = { width: w, height: h };
+    const { strips } = this.begin(view, true, 1, size);
+    for (let i = 0; i < strips; i++) {
+      this.begin(view, false, 1, size);
+      this.drawStrip(i, strips);
+    }
+    const bytes = new Uint8Array(w * h * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.passFbo);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.passView = null;
+    return bytes;
   }
 
   // The frame on screen, RGBA bytes, rows bottom up. The context keeps its

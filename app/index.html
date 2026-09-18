@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="editor.css" />
   <link rel="stylesheet" href="viewer.css" />
   <link rel="stylesheet" href="hud.css" />
+  <link rel="stylesheet" href="timeline.css" />
 </head>
 <body>
   <a id="portal" class="btn portal-link" href="../portal/" title="Back to the portal">Portal</a>
@@ -191,12 +192,75 @@
           </g>
         </svg>
       </button>
+      <button id="animate" class="cbtn" type="button" title="Animation timeline (V)"
+              aria-label="Animation timeline" aria-pressed="false">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <g fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="2.5" y="5.5" width="19" height="13" rx="2"/>
+            <path d="M7 5.5v13M17 5.5v13"/>
+          </g>
+          <g fill="currentColor">
+            <rect x="4" y="7.5" width="1.8" height="1.8"/><rect x="4" y="11.1" width="1.8" height="1.8"/><rect x="4" y="14.7" width="1.8" height="1.8"/>
+            <rect x="18.2" y="7.5" width="1.8" height="1.8"/><rect x="18.2" y="11.1" width="1.8" height="1.8"/><rect x="18.2" y="14.7" width="1.8" height="1.8"/>
+          </g>
+        </svg>
+      </button>
       <button id="save" class="cbtn cbtn-accent" type="button" title="Save PNG (Space)" aria-label="Save PNG">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>
       </button>
     </div>
 
-    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · Z X turn, R levels · [ ] detail · , . colour · P the plane · H folds the panel · G or paste to go somewhere · F dives somewhere new · Space saves</p>
+    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · Z X turn, R levels · [ ] detail · , . colour · P the plane · H folds the panel · G or paste to go somewhere · F dives somewhere new · V animates · Space saves</p>
+
+    <section id="timeline" class="timeline panel" hidden aria-label="Animation timeline">
+      <div class="tl-bar">
+        <span class="tl-title">Animation</span>
+        <button id="tl-add" class="btn btn-accent" type="button" title="Take a keyframe where the view stands (K)">+ Keyframe</button>
+        <button id="tl-play" class="btn" type="button" title="Play the animation">▶ Play</button>
+        <input id="tl-scrub" class="tl-scrub" type="range" min="0" max="1" step="0.001" value="0"
+               aria-label="Scrub the animation" />
+        <span id="tl-time" class="tl-time">0.0 / 0.0 s</span>
+        <label class="tl-field"><span class="hud-k">ease</span><select id="tl-ease" class="input"></select></label>
+        <span class="tl-gap"></span>
+        <button id="tl-render" class="btn" type="button">Render…</button>
+        <button id="tl-text" class="btn" type="button" title="This animation as text, to keep or to paste back">Text</button>
+        <button id="tl-clear" class="btn" type="button">Clear</button>
+        <button id="tl-close" class="tl-close" type="button" title="Close the timeline (V)" aria-label="Close the timeline">×</button>
+      </div>
+
+      <ol id="tl-keys" class="tl-keys"></ol>
+      <p id="tl-empty" class="tl-empty">Put the view somewhere worth starting from and press <b>+ Keyframe</b>. Move it and press again: the animation runs from each keyframe to the next, zooming, panning and turning the whole way.</p>
+
+      <form id="tl-export" class="tl-export" hidden autocomplete="off">
+        <label class="tl-field"><span class="hud-k">format</span><select id="tl-format" class="input"></select></label>
+        <label class="tl-field"><span class="hud-k">size</span><select id="tl-size" class="input"></select></label>
+        <label class="tl-field"><span class="hud-k">fps</span><select id="tl-fps" class="input"></select></label>
+        <label class="tl-field" id="tl-quality-field"><span class="hud-k">quality</span><select id="tl-quality" class="input"></select></label>
+        <label class="tl-field tl-check" id="tl-dither-field"><input id="tl-dither" type="checkbox" /><span>dither</span></label>
+        <label class="tl-field"><span class="hud-k">detail</span><select id="tl-detail" class="input"></select></label>
+        <button type="submit" class="btn btn-accent">Render</button>
+        <button type="button" id="tl-export-cancel" class="btn">Cancel</button>
+        <p id="tl-estimate" class="tl-estimate"></p>
+      </form>
+
+      <div id="tl-progress" class="tl-progress" hidden>
+        <progress id="tl-bar" max="1" value="0"></progress>
+        <span id="tl-progress-text" role="status"></span>
+        <button type="button" id="tl-stop" class="btn">Stop</button>
+      </div>
+
+      <div id="tl-textbox" class="tl-textbox" hidden>
+        <textarea id="tl-json" class="input" rows="6" spellcheck="false"
+                  aria-label="This animation as text"></textarea>
+        <div class="tl-textbox-actions">
+          <button type="button" id="tl-apply" class="btn btn-accent">Apply</button>
+          <button type="button" id="tl-copy" class="btn">Copy</button>
+          <button type="button" id="tl-text-close" class="btn">Close</button>
+        </div>
+      </div>
+
+      <p id="tl-note" class="tl-note" role="status"></p>
+    </section>
   </section>
 
   <script type="module" src="app.js"></script>

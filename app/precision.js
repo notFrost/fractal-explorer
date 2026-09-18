@@ -35,6 +35,34 @@ export function scaledStep(k, e, bits) {
   return BigInt(Math.round(r * 2 ** f));
 }
 
+// A fixed-point value times a double in (0, 1], to within half a unit in the
+// last place of the result. A keyframe path multiplies a whole world offset by
+// a share that falls to 2^-1000 over a deep zoom, and `Math.round(w * 2**bits)`
+// would flush such a share to zero long before the picture stopped moving. So
+// the double is taken apart into the integer mantissa and exponent it already
+// is, and the shift carries the exponent.
+const WORD = new DataView(new ArrayBuffer(8));
+
+function mantissa(w) {
+  WORD.setFloat64(0, w);
+  const hi = WORD.getUint32(0);
+  const exp = (hi >>> 20) & 0x7ff;
+  const bits = (BigInt(hi & 0xfffff) << 32n) | BigInt(WORD.getUint32(4));
+  // A subnormal has no implied leading bit and reads its exponent as 1.
+  return exp === 0 ? { m: bits, e: -1074 } : { m: bits | (1n << 52n), e: exp - 1075 };
+}
+
+export function scaleFixed(d, w) {
+  if (d === 0n || !(w > 0) || !Number.isFinite(w)) return 0n;
+  const neg = d < 0n;
+  const { m, e } = mantissa(w);
+  const product = (neg ? -d : d) * m;
+  const scaled = e >= 0
+    ? product << BigInt(e)
+    : (product + (1n << BigInt(-e - 1))) >> BigInt(-e);
+  return neg ? -scaled : scaled;
+}
+
 export function toDecimal(b, bits, digits) {
   const neg = b < 0n;
   const a = neg ? -b : b;
@@ -59,6 +87,14 @@ export function parseDecimal(str, bits) {
   return m[1] ? -v : v;
 }
 
+// Zoom for reading: a plain multiplier while one fits, then a power of ten,
+// since past a thousand doublings the number itself is beyond a double.
+export function formatZoom(lz) {
+  if (lz < Math.log2(1e5)) return `${Math.round(2 ** lz).toLocaleString()}×`;
+  if (lz < 1000) return `${(2 ** lz).toExponential(2)}×`;
+  return `10^${Math.round(lz * 0.30103)}×`;
+}
+
 // Camera: centre in fixed point, zoom as log2 (double, unbounded).
 export class Camera {
   constructor(x = 0, y = 0, zoom = 100) {
@@ -78,6 +114,17 @@ export class Camera {
       lz = Math.log2(z);
     }
     return Camera.fromDecimal(xs, ys, lz);
+  }
+
+  // Centre from a fixed point held at some other width, for a camera built by
+  // arithmetic rather than read from text.
+  static fromFixed(x, y, fromBits, lz) {
+    const c = new Camera(0, 0, 1);
+    c.lz = lz;
+    c.bits = bitsFor(lz);
+    c.x = rescale(x, fromBits, c.bits);
+    c.y = rescale(y, fromBits, c.bits);
+    return c;
   }
 
   // Centre from decimal strings at a given log2 zoom. Null if either fails to parse.
