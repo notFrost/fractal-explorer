@@ -7,6 +7,7 @@ import { frameCustom } from './framing.js';
 import { pickSpot } from './dive.js';
 import { drawPlane } from './plane.js';
 import { readSaved, writeSaved, freeId, registerSet, unregisterSet } from './saved.js';
+import { createGrid } from './grid.js';
 
 // ---------- State ----------
 
@@ -1161,10 +1162,10 @@ function saveFractal(fractal) {
   }
   if (at < 0) {
     savedFractals.push(fractal);
-    cards.append(makeCard(fractal.id));
+    grid.add(fractal.id);
   } else {
     savedFractals[at] = fractal;
-    slotOf(fractal.id)?.replaceWith(makeCard(fractal.id));
+    grid.replace(fractal.id);
   }
   return null;
 }
@@ -1182,7 +1183,7 @@ function deleteSaved(id) {
 function dropSavedSet(id) {
   renderer?.setCustom(id, null);
   unregisterSet(id);
-  slotOf(id)?.remove();
+  grid.remove(id);
 }
 
 $('#editor-save').addEventListener('click', () => {
@@ -1197,7 +1198,7 @@ $('#editor-save').addEventListener('click', () => {
     return;
   }
   leaveEditor();
-  cards.querySelector(`.card[data-set="${fractal.id}"]`)?.focus();
+  grid.focus(fractal.id);
 });
 
 // A coordinate pasted anywhere in the viewer goes straight there.
@@ -1651,6 +1652,7 @@ function renderCards() {
   if (!renderer) return;
   const dpr = pixelRatio();
   for (const card of document.querySelectorAll('.card')) {
+    if (card.offsetParent === null) continue;
     const set = card.dataset.set;
     const h = SETS[set].home;
     const cam = new Camera(h.x, h.y, h.zoom);
@@ -1665,108 +1667,12 @@ function renderCards() {
   }
 }
 
-function slotOf(set) {
-  return cards.querySelector(`.card[data-set="${set}"]`)?.closest('li');
-}
-
-function makeCard(set) {
-  const li = document.createElement('li');
-  li.className = 'card-slot';
-  const card = document.createElement('button');
-  card.type = 'button';
-  card.className = 'card';
-  card.dataset.set = set;
-  const thumb = document.createElement('canvas');
-  thumb.className = 'thumb';
-  thumb.width = 240;
-  thumb.height = 180;
-  thumb.setAttribute('aria-hidden', 'true');
-  const name = document.createElement('span');
-  name.className = 'card-name';
-  name.textContent = SETS[set].name;
-  const formula = document.createElement('span');
-  formula.className = 'card-formula';
-  formula.textContent = SETS[set].formula;
-  card.append(thumb, name, formula);
-  li.append(card, editControl(set), ...deleteControls(set, li));
-  return li;
-}
-
-// Every card has one. A set whose iteration the editor cannot write is greyed,
-// and says so rather than going quiet.
-function editControl(set) {
-  const { name, edit, unwritable } = SETS[set];
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'card-tool card-edit';
-  btn.textContent = 'Edit';
-  btn.disabled = !edit;
-  btn.title = edit ? `Edit ${name}` : unwritable;
-  btn.setAttribute('aria-label', edit ? `Edit ${name}` : `Edit ${name}: ${unwritable}`);
-  btn.addEventListener('click', () => editFractal(set));
-  return btn;
-}
-
-// The × and the question that replaces it are siblings of the card, since a
-// button cannot hold another one.
-function deleteControls(set, slot) {
-  const question = `Delete ${SETS[set].name}?`;
-  const ask = document.createElement('button');
-  ask.type = 'button';
-  ask.className = 'card-tool card-delete';
-  ask.title = question;
-  ask.setAttribute('aria-label', question);
-  ask.textContent = '×';
-
-  const panel = document.createElement('div');
-  panel.className = 'card-confirm';
-  panel.hidden = true;
-  panel.setAttribute('role', 'group');
-  panel.setAttribute('aria-label', question);
-  const text = document.createElement('p');
-  text.className = 'card-confirm-text';
-  text.textContent = question;
-  const yes = document.createElement('button');
-  yes.type = 'button';
-  yes.className = 'btn btn-accent';
-  yes.textContent = 'Delete';
-  const no = document.createElement('button');
-  no.type = 'button';
-  no.className = 'btn';
-  no.textContent = 'Cancel';
-  const row = document.createElement('div');
-  row.className = 'card-confirm-row';
-  row.append(yes, no);
-  panel.append(text, row);
-
-  const open = (on) => {
-    panel.hidden = !on;
-    ask.hidden = on;
-    slot.classList.toggle('asking', on);
-    (on ? yes : ask).focus();
-  };
-  const close = () => open(false);
-  ask.addEventListener('click', () => open(true));
-  no.addEventListener('click', close);
-  panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
-  yes.addEventListener('click', () => deleteSaved(set));
-  return [ask, panel];
-}
-
 function homeView(set) {
   const { x, y, zoom } = SETS[set].home;
   const aspect = window.innerWidth / window.innerHeight;
   if (aspect >= 4 / 3) return { x, y, zoom };
   return { x, y, zoom: 2 ** clampLogZoom(Math.log2((zoom * aspect * 3) / 4), set) };
 }
-
-cards.addEventListener('click', (e) => {
-  const card = e.target.closest('.card');
-  if (!card) return;
-  state.julia = { ...SETS.julia.c };
-  state.angle = 0;
-  showViewer(card.dataset.set, homeView(card.dataset.set));
-});
 
 // ---------- Boot ----------
 
@@ -1776,11 +1682,28 @@ setPalette(initialPalette(), { render: false });
 setPlane(initialPlane());
 state.angle = initialAngle();
 
-for (const card of cards.querySelectorAll('.card')) card.after(editControl(card.dataset.set));
+// A saved fractal is a set like any other once its shader compiles. One that
+// will not compile here is left out of the menu rather than carded blank, and
+// stays in storage for a browser that can draw it.
+for (const fractal of savedFractals) registerFractal(fractal);
 
-for (const fractal of savedFractals) {
-  if (!registerFractal(fractal)) cards.append(makeCard(fractal.id));
-}
+// The grid is built after that, so the sets it arranges are all of them.
+const grid = createGrid({
+  list: cards,
+  note: $('#menu-note'),
+  deletable: (set) => savedFractals.some((f) => f.id === set),
+  onOpen: (set) => {
+    state.julia = { ...SETS.julia.c };
+    state.angle = 0;
+    showViewer(set, homeView(set));
+  },
+  onEdit: editFractal,
+  onDelete: deleteSaved,
+  repaint: renderCards,
+});
+
+$('#new-folder').addEventListener('click', () => grid.addFolder());
+window.__fx.grid = grid;
 
 const params = new URLSearchParams(location.search);
 if (params.get('f')) {
