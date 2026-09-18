@@ -97,10 +97,10 @@ export function keyFrom({ cam, angle, julia }, before = null) {
 
 // ---------- Easing ----------
 //
-// The ease runs over the whole path's moving time rather than over each
-// segment, so a run through six keyframes sets off once and settles once
-// instead of stopping at every one of them. A hold is time the view stands
-// still by request, so the ease leaves it out.
+// The ease runs over a whole run of movement rather than over each segment, so
+// a run through six keyframes sets off once and settles once instead of
+// stopping at every one of them. A hold ends a run. The view stands still there
+// by request, so that is where the ease settles and sets off again.
 
 export const EASINGS = [
   { key: 'steady', name: 'Steady', fn: (u) => u },
@@ -116,24 +116,27 @@ export const easingByKey = (key) => EASINGS.find((e) => e.key === key) ?? EASING
 // ---------- The timeline ----------
 
 // The path laid out in time: a stretch standing still at each keyframe that
-// asks for one, and a stretch moving between each pair. `m0` and `m1` are the
-// same stretch measured in moving time alone, which is what the ease warps.
+// asks for one, and a stretch moving between each pair. The moving stretches
+// between two holds make a run. `m0` and `m1` measure a stretch in its run's
+// moving time alone, which is what the ease warps.
 export function plan(keys, easingKey = DEFAULT_EASING) {
   const ease = easingByKey(easingKey).fn;
   const list = keys.map(tidyKey);
   const pieces = [];
   let t = 0;
-  let m = 0;
+  let run = null;
   for (const [at, key] of list.entries()) {
     if (key.hold > 0) {
       pieces.push({ move: false, from: at, t0: t, t1: t + key.hold });
       t += key.hold;
+      run = null;
     }
     const span = at < list.length - 1 ? key.span : 0;
     if (span >= LEAST_SPAN) {
-      pieces.push({ move: true, from: at, to: at + 1, t0: t, t1: t + span, m0: m, m1: m + span });
+      run ??= { motion: 0 };
+      pieces.push({ move: true, run, from: at, to: at + 1, t0: t, t1: t + span, m0: run.motion, m1: run.motion + span });
       t += span;
-      m += span;
+      run.motion += span;
     }
   }
   // Every centre is read once, at the width the deepest keyframe needs, and
@@ -144,7 +147,7 @@ export function plan(keys, easingKey = DEFAULT_EASING) {
     x: parseDecimal(k.x, bits) ?? 0n,
     y: parseDecimal(k.y, bits) ?? 0n,
   }));
-  return { keys: list, fixed, bits, pieces, total: t, motion: m, ease };
+  return { keys: list, fixed, bits, pieces, total: t, ease };
 }
 
 const pieceAt = (pieces, t) => pieces.find((p) => t < p.t1) ?? pieces[pieces.length - 1];
@@ -165,12 +168,13 @@ export function sample(p, t) {
   const piece = pieceAt(p.pieces, Math.max(0, Math.min(t, p.total)));
   if (!piece.move) return keyState(p, piece.from);
 
-  // The ease moves a moment of moving time to another moment of it, which may
-  // land in a different segment than the one the clock is in.
-  const eased = p.motion > 0
-    ? p.ease(Math.min(1, Math.max(0, (piece.m0 + (t - piece.t0)) / p.motion))) * p.motion
-    : 0;
-  const seg = p.pieces.find((q) => q.move && eased < q.m1) ?? piece;
+  // The ease moves a moment of the run's moving time to another moment of it,
+  // which may land in a different segment than the one the clock is in. The
+  // eased moment stays inside the run, so the view is on the keyframe when a
+  // hold begins and still on it when the hold ends.
+  const { motion } = piece.run;
+  const eased = p.ease(Math.min(1, Math.max(0, (piece.m0 + (t - piece.t0)) / motion))) * motion;
+  const seg = p.pieces.find((q) => q.run === piece.run && eased < q.m1) ?? piece;
   const u = seg.m1 > seg.m0 ? Math.min(1, Math.max(0, (eased - seg.m0) / (seg.m1 - seg.m0))) : 1;
 
   const a = p.keys[seg.from];
