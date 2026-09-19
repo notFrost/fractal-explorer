@@ -32,6 +32,8 @@
 
     <p class="create">
       <button id="create" class="btn btn-accent create-btn" type="button">Create Fractal</button>
+      <button id="invent-fractal" class="btn create-folder" type="button"
+              title="Open the editor on a formula made up on the spot">Invent Fractal</button>
       <button id="new-folder" class="btn create-folder" type="button">New Folder</button>
     </p>
     <p id="menu-note" class="menu-note" role="status"></p>
@@ -45,7 +47,7 @@
   <main id="editor" class="page" hidden>
     <header class="page-head">
       <h1 class="title"><span id="editor-verb">Create</span><br />Fractal</h1>
-      <p class="lede">One formula, iterated until it escapes, from starting values you set. Add variables of your own. Render it once, or save it to the menu.</p>
+      <p class="lede">One formula, iterated until it escapes, from starting values you set. Add variables of your own, or have one made up. Render it once, or save it to the menu.</p>
     </header>
 
     <div class="editor">
@@ -54,12 +56,23 @@
         <input id="fractal-name" class="input editor-name" type="text" maxlength="40" spellcheck="false"
                aria-describedby="save-help" />
 
-        <label class="editor-label" for="formula">Formula</label>
+        <div class="editor-head">
+          <label class="editor-label" for="formula">Formula</label>
+          <button type="button" id="invent" class="btn editor-make"
+                  title="Put up a formula made of parts picked at random">Invent</button>
+          <button type="button" id="tweak" class="btn editor-make"
+                  title="Change this formula in one or two small ways">Tweak</button>
+        </div>
         <div class="editor-field">
           <div id="formula-ink" class="editor-ink" aria-hidden="true"></div>
           <input id="formula" class="input editor-input" type="text" spellcheck="false" autocapitalize="off"
-                 placeholder="Z_(n+1) = Z_(n)^2 + C" aria-describedby="formula-help" />
+                 placeholder="Z_(n+1) = Z_(n)^2 + C" aria-describedby="formula-help make-help" />
         </div>
+        <p id="make-help" class="editor-help">
+          <span><b>Invent</b> makes one up, out of powers, bars, waves and c</span>
+          <span><b>Tweak</b> moves this one a step: an exponent, a bar, a term</span>
+          <span>each press draws again</span>
+        </p>
         <p id="formula-help" class="editor-help">
           <span class="tok-var" id="formula-vars">z c x y</span>
           <span class="tok-num">numbers</span>

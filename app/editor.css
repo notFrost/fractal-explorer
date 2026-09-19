@@ -64,6 +64,27 @@
   padding: 0.6rem 0.7rem;
 }
 
+/* The formula's label, with the two buttons that write the line for you at
+   the other end of the row. */
+.editor-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.editor-head .editor-label {
+  margin-right: auto;
+}
+
+.editor-make {
+  padding: 0.2rem 0.7rem;
+}
+
+#make-help b {
+  color: var(--ink);
+  font-weight: 400;
+}
+
 /* The coloured line sits under a transparent input, which keeps the caret,
    the selection and the scroll. Both boxes take the same metrics so the two
    layers land character on character. */

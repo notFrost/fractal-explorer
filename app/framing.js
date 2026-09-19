@@ -1,5 +1,6 @@
 // Where a typed formula's fractal sits, so the editor's preview and the view
-// Render opens on frame it instead of assuming the origin.
+// Render opens on frame it instead of assuming the origin. For a formula
+// nobody typed, it also says whether there is a fractal there to frame.
 //
 // A formula gives no closed form for its set's extent, so the survey measures
 // it. It draws a small greyscale map of how long each pixel's orbit lasts,
@@ -123,4 +124,53 @@ export function frameCustom(renderer, parts, fallback) {
   } catch {
     return fallback;
   }
+}
+
+// ---------- Is there a fractal here at all ----------
+
+// The generator and the tweaker put several formulas up against each other
+// and keep the best, and this is the mark each one gets. One opening view,
+// one read back, no closing in: a formula worth keeping nearly always has
+// something in the widest view the survey starts from, and the winner is
+// framed properly afterwards like any other.
+
+// Below the first, whatever never escapes is a speck or a rounding error;
+// above the second, the picture is interior with its edge off the frame.
+const LEAST_INSIDE = 0.002;
+const MOST_INSIDE = 0.75;
+
+const insideShare = (depth) => {
+  let held = 0;
+  for (let i = 0; i < WIDE * HIGH; i++) if (depth[i * 4] === 255) held++;
+  return held / (WIDE * HIGH);
+};
+
+// How hard the escape count works across the picture. A disc of one colour
+// and a smooth wash behind it score near nothing; the filaments along a
+// boundary swing the count from one pixel to the next, and a set with more
+// boundary in view scores over a set with less.
+function detail(depth) {
+  let total = 0;
+  for (let row = 1; row < HIGH - 1; row++) {
+    for (let col = 1; col < WIDE - 1; col++) {
+      const at = (row * WIDE + col) * 4;
+      total += Math.abs(depth[at + 4] - depth[at - 4])
+        + Math.abs(depth[at + WIDE * 4] - depth[at - WIDE * 4]);
+    }
+  }
+  return total / ((WIDE - 2) * (HIGH - 2));
+}
+
+// Zero for a formula with nothing to see, and for one the GPU would not draw.
+export function fractalScore(renderer, parts) {
+  const cam = surveyCamera(0, 0, OPENING_ZOOM);
+  let depth = null;
+  try {
+    depth = renderer?.depthMap(parts, cam, WIDE, HIGH, iterationsFor(cam.lz, 1, 'custom'));
+  } catch {
+    return 0;
+  }
+  if (!depth) return 0;
+  const inside = insideShare(depth);
+  return inside < LEAST_INSIDE || inside > MOST_INSIDE ? 0 : detail(depth);
 }

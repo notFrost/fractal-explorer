@@ -2,8 +2,9 @@ import { SETS, MIN_LOG_ZOOM, MIN_ITER, iterationsFor, baseIterations, iterCeilin
 import { Camera, formatZoom } from './precision.js';
 import { Renderer } from './gpu.js';
 import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palettes.js';
-import { parseFormula, parseSeed, formulaTokens, seedTokens, varGlsl, freeVarName, varNameError } from './formula.js';
-import { frameCustom } from './framing.js';
+import { parseFormula, parseSeed, formulaTokens, seedTokens, varGlsl, freeVarName, varNameError, printFormula } from './formula.js';
+import { frameCustom, fractalScore } from './framing.js';
+import { inventFormula, tweakFormula } from './invent.js';
 import { pickSpot } from './dive.js';
 import { drawPlane } from './plane.js';
 import { readSaved, writeSaved, freeId, registerSet, unregisterSet } from './saved.js';
@@ -98,6 +99,8 @@ const editor = {
   seeds: $('#editor-seeds'),
   addVar: $('#add-var'),
   known: $('#formula-vars'),
+  invent: $('#invent'),
+  tweak: $('#tweak'),
 };
 const preview = {
   box: $('#preview'),
@@ -1099,6 +1102,65 @@ function schedulePreview() {
   previewTimer = setTimeout(updatePreview, PREVIEW_DELAY);
 }
 
+// ---------- Inventing a formula, and moving one along ----------
+
+// A formula drawn at random is as likely to escape everywhere or nowhere as
+// it is to draw anything, and so is a formula a tweak has just moved. So the
+// press draws several and keeps whichever one framing.js found the most
+// fractal in. Each draw costs one small depth pass; the winner is framed and
+// previewed once, as a typed line is.
+const INVENT_DRAWS = 8;
+const TWEAK_DRAWS = 4;
+
+function bestDraw(draws, nextTexts) {
+  let best = null;
+  let mark = -1;
+  let trouble = null;
+  for (let draw = 0; draw < draws; draw++) {
+    const texts = nextTexts();
+    if (!texts) continue;
+    let parts;
+    try {
+      parts = shaderParts(parseCustom(texts));
+    } catch (err) {
+      trouble = err.message;
+      continue;
+    }
+    const score = fractalScore(renderer, parts);
+    if (score > mark) {
+      best = texts;
+      mark = score;
+    }
+  }
+  return { texts: best, trouble };
+}
+
+const NOTHING_DREW = 'none of those drew anything';
+
+// The line changes; the starting values, the variables and the name stay as
+// they are, so an invented formula lands in the arrangement already set up.
+function drawFormula(draws, nextLine) {
+  const base = editorTexts();
+  const { texts, trouble } = bestDraw(draws, () => {
+    const formula = nextLine();
+    return formula && { ...base, formula };
+  });
+  if (!texts) return trouble ?? NOTHING_DREW;
+  for (const f of FIELDS) editor.input[f.key].value = texts[f.key];
+  editor.error.textContent = '';
+  repaint();
+  clearTimeout(previewTimer);
+  updatePreview();
+  return null;
+}
+
+const inventedLine = () => printFormula(inventFormula());
+
+const tweakedLine = (tree) => {
+  const next = tweakFormula(tree);
+  return next && printFormula(next);
+};
+
 function leaveEditor() {
   renderer?.setCustom('custom', committed?.parts ?? null);
   previewKey = '';
@@ -1150,6 +1212,23 @@ for (const f of FIELDS) {
   input.addEventListener('input', editorChanged);
   input.addEventListener('scroll', () => { editor.ink[f.key].scrollLeft = input.scrollLeft; });
 }
+
+editor.invent.addEventListener('click', () => {
+  const err = drawFormula(INVENT_DRAWS, inventedLine);
+  if (err) editor.error.textContent = err;
+});
+
+editor.tweak.addEventListener('click', () => {
+  let parsed;
+  try {
+    parsed = parseCustom(editorTexts());
+  } catch (err) {
+    editor.error.textContent = err.message;
+    return;
+  }
+  const err = drawFormula(TWEAK_DRAWS, () => tweakedLine(parsed.formula.tree));
+  if (err) editor.error.textContent = err;
+});
 
 function editFractal(set) {
   openedFrom = set;
@@ -1249,6 +1328,21 @@ $('#editor-cancel').addEventListener('click', leaveEditor);
 $('#create').addEventListener('click', () => {
   openedFrom = null;
   opensWith = null;
+  editor.name.value = '';
+  showEditor();
+});
+
+// Inventing from the menu starts from the usual arrangement rather than from
+// whatever the editor was last left holding, so the draw is judged on a
+// parameter plane and the formula is the only thing that was made up.
+$('#invent-fractal').addEventListener('click', () => {
+  const { texts } = bestDraw(INVENT_DRAWS, () => ({ ...DEFAULTS, vars: [], formula: inventedLine() }));
+  if (!texts) {
+    $('#menu-note').textContent = NOTHING_DREW;
+    return;
+  }
+  openedFrom = null;
+  opensWith = texts;
   editor.name.value = '';
   showEditor();
 });
