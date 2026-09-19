@@ -41,8 +41,8 @@ export function freeId(list) {
   return `saved${n}`;
 }
 
-export function registerSet(id, { name, formula, home, edit }) {
-  SETS[id] = { name, formula, custom: true, maxLogZoom: FLOAT_LOG_ZOOM, home, edit, bookmarks: [] };
+export function registerSet(id, { name, formula, values, home, edit }) {
+  SETS[id] = { name, formula, values, custom: true, maxLogZoom: FLOAT_LOG_ZOOM, home, edit, bookmarks: [] };
   SHADERS[id] = { float: id };
   COST[id] = COST.custom;
   ORBITS[id] = ORBITS.custom;

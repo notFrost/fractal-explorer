@@ -3,9 +3,11 @@
 //
 // Everything a keyframe holds is taken from the view on screen, so the way to
 // build an animation is the way to explore: pan, zoom and turn until the
-// picture is worth keeping, press + Keyframe, and go somewhere else. The panel
-// owns no camera of its own; it asks the viewer for one and hands sampled ones
-// back.
+// picture is worth keeping, press + Keyframe, and go somewhere else. A typed
+// formula's own variables are part of that view, so two keyframes on one spot
+// with a variable moved between them are a movie that holds still and watches
+// the fractal itself change. The panel owns no camera of its own; it asks the
+// viewer for one and hands sampled ones back.
 
 import {
   EASINGS, DEFAULT_EASING, easingByKey, DEFAULT_SPAN,
@@ -14,6 +16,7 @@ import {
 } from './keyframes.js';
 import { QUALITIES, frameCount, trueFps, fitSize, bitrateFor, movieName, canEncodeMp4 } from './movie.js';
 import { formatZoom } from './precision.js';
+import { valueText } from './formula.js';
 
 const THUMB_W = 128;
 const THUMB_H = 96;
@@ -73,7 +76,20 @@ const shortNum = (s) => (s.length > 13 ? `${s.slice(0, 13)}…` : s);
 
 const coordText = (key) => `${shortNum(key.x)} ${key.y.startsWith('-') ? '−' : '+'} ${shortNum(key.y.replace(/^-/, ''))}i`;
 
-const signature = (key) => [key.x, key.y, key.lz, key.angle, key.julia?.re, key.julia?.im].join('|');
+// What the formula's own variables stand at on one keyframe, for a fractal
+// that holds any. Nothing at all for one that does not, and the card is a row
+// shorter.
+function varsLine(vars) {
+  const text = Object.entries(vars ?? {}).map(([name, v]) => `${name} = ${valueText(v)}`).join('  ');
+  if (!text) return [];
+  const el = document.createElement('span');
+  el.className = 'tl-key-vars';
+  el.textContent = text;
+  return [el];
+}
+
+const signature = (key) =>
+  [key.x, key.y, key.lz, key.angle, key.julia?.re, key.julia?.im, JSON.stringify(key.vars ?? null)].join('|');
 
 function option(value, label) {
   const el = document.createElement('option');
@@ -265,7 +281,7 @@ export function createStudio(hooks) {
       tool('×', `Delete keyframe ${index + 1}`, () => drop(index), false, 'tl-drop'),
     );
 
-    li.append(jump, head, where, times, tools);
+    li.append(jump, head, where, ...varsLine(key.vars), times, tools);
     paint(thumb, index);
     return li;
   }

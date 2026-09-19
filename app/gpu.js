@@ -1,5 +1,6 @@
 import { MAX_ITER, STAGE_HEIGHT, FLOAT_LOG_ZOOM, BIG_LOG_ZOOM, FE_LOG_ZOOM } from './fractals.js';
 import { bitsFor, ORBITS } from './precision.js';
+import { varGlsl } from './formula.js';
 import { VERT, COMMON, BLIT } from './shaders/common.js';
 import { customBody, depthBody, partsKey } from './shaders/custom.js';
 import { SOURCES, SHADERS, COST } from './shaders/registry.js';
@@ -41,6 +42,10 @@ const REPROJECT_LZ = 3;
 const REPROJECT_STAGE = 2 * STAGE_HEIGHT;
 
 const juliaKey = (view) => (view.julia ? `${view.julia.re},${view.julia.im}` : '');
+
+// The uniform name for each of a typed formula's own variables, in the order
+// the parts list them.
+const liveNames = (parts) => (parts?.live ?? []).map((v) => varGlsl(v.name));
 
 const customKey = (parts) => (parts ? partsKey(parts) : null);
 
@@ -128,8 +133,13 @@ export class Renderer {
   }
 
   setCustom(name, parts) {
-    if (customKey(parts) === customKey(this.customs.get(name) ?? null)) return;
-    const prog = parts && this.link(COMMON + customBody(parts));
+    if (customKey(parts) === customKey(this.customs.get(name) ?? null)) {
+      // The program is the same, but the values its variables open at may
+      // not be, since those are no part of the key.
+      if (parts) this.customs.set(name, parts);
+      return;
+    }
+    const prog = parts && this.link(COMMON + customBody(parts), [...UNIFORMS, ...liveNames(parts)]);
     if (this.programs[name]) this.gl.deleteProgram(this.programs[name].p);
     if (prog) {
       this.programs[name] = prog;
@@ -137,6 +147,16 @@ export class Renderer {
     } else {
       delete this.programs[name];
       this.customs.delete(name);
+    }
+  }
+
+  // What this draw holds the formula's own variables at. A view that names
+  // none of them draws each at the value its formula was written with, which
+  // is what a menu card and the framing survey ask for.
+  setLive(prog, parts, vars) {
+    for (const v of parts?.live ?? []) {
+      const held = vars?.[v.name] ?? v;
+      this.gl.uniform2f(prog.u[varGlsl(v.name)], Number(held.re), Number(held.im));
     }
   }
 
@@ -389,6 +409,7 @@ export class Renderer {
     }
     const prog = this.programs[name];
     if (view.julia) gl.uniform2f(prog.u.u_julia, Number(view.julia.re), Number(view.julia.im));
+    this.setLive(prog, this.customs.get(name), view.vars);
     const angle = view.angle ?? 0;
     gl.uniform2f(prog.u.u_rot, Math.cos(angle), Math.sin(angle));
     gl.viewport(0, 0, w, h);
@@ -482,7 +503,7 @@ export class Renderer {
     const key = customKey(parts);
     if (key !== this.depthKey) {
       if (this.depth) gl.deleteProgram(this.depth.p);
-      this.depth = this.link(COMMON + depthBody(parts));
+      this.depth = this.link(COMMON + depthBody(parts), [...UNIFORMS, ...liveNames(parts)]);
       this.depthKey = key;
     }
     this.canvas.width = w;
@@ -490,6 +511,7 @@ export class Renderer {
     const prog = this.depth;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.useProgram(prog.p);
+    this.setLive(prog, parts, null);
     gl.uniform2f(prog.u.u_res, w, h);
     gl.uniform1f(prog.u.u_px, STAGE_HEIGHT / (h * cam.zoom));
     gl.uniform2f(prog.u.u_center, cam.xDouble(), cam.yDouble());

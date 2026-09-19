@@ -82,7 +82,8 @@
 .hud-edit:hover { border-color: var(--dim); }
 
 .goto,
-.julia {
+.julia,
+.vars {
   display: grid;
   gap: 0.35rem;
   margin-top: 0.5rem;
@@ -91,7 +92,23 @@
 }
 
 .goto[hidden],
-.julia[hidden] { display: none; }
+.julia[hidden],
+.vars[hidden] { display: none; }
+
+/* The variables a typed formula holds at a value. Each is a letter and the
+   pair of numbers behind it, which the timeline moves between keyframes. */
+.vars-rows { display: grid; gap: 0.25rem; }
+
+.vars-row {
+  display: grid;
+  grid-template-columns: 4ch 1fr auto 1fr auto;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.vars-op { color: var(--dim); }
+.vars-title { min-width: 0; }
+.vars .goto-error:empty { display: none; }
 
 /* Julia's C: the Mandelbrot map it is picked off, two inputs, and the named
    parameters from the original. */

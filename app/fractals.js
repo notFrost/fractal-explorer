@@ -1,5 +1,7 @@
 // Set metadata and the iteration budget.
 
+import { valueText } from './formula.js';
+
 export const MIN_LOG_ZOOM = Math.log2(10);
 export const MAX_ITER = 100000;
 export const MIN_ITER = 16;
@@ -126,6 +128,18 @@ export const SETS = {
     bookmarks: [],
   },
 };
+
+// What a card and the viewer's label say a set draws. A custom set's formula
+// is the line it was written as. The variables it holds at a value are written
+// after it, at the values asked for rather than at the ones it was saved with,
+// since a movie moves them.
+export const LABEL_SEP = '  \u00b7  ';
+
+export const valueParts = (values) =>
+  Object.entries(values ?? {}).map(([name, v]) => `${name} = ${valueText(v)}`);
+
+export const setLine = (set, values = SETS[set].values) =>
+  [SETS[set].formula, ...valueParts(values)].join(LABEL_SEP);
 
 // What the zoom alone asks for, before the user's multiplier.
 export function baseIterations(log2zoom) {
