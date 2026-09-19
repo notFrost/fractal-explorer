@@ -11,7 +11,7 @@ and controls carry over; the CPU pen-plotting does not.
 
 Try [10^301 zoom](https://fractal-explorer-six.vercel.app/app/#mandelbrot@0,1,2^1000.000)
 to see the arbitrary-precision path working: a 1128-bit reference orbit, drawn
-in 77 strips.
+in as many strips as the card needs.
 
 Any view can be taken as a keyframe, and the timeline under the viewer renders
 the path between keyframes out to an MP4 or a GIF with every frame drawn whole.
@@ -138,7 +138,10 @@ Under `prefers-reduced-motion` the view arrives without the fall.
 One fullscreen triangle, one fragment shader per set. Cheap frames are a
 single draw call. Expensive frames are drawn in horizontal strips across
 successive animation frames so no draw call runs long enough to trip the GPU
-watchdog. Every input event starts a new frame and cancels the old one.
+watchdog. A strip is sized to 65 ms at the rate the timer extension has
+measured that shader running at, so the count follows the machine rather than
+the view: a card twice as fast draws the same frame in half the strips.
+Every input event starts a new frame and cancels the old one.
 
 Rotation happens where a pixel becomes a complex number. Each shader takes the
 pixel's offset from the centre of the screen, turns it onto the plane's axes,
@@ -158,6 +161,14 @@ offset (Zhuoran's method). The reference is cached and reused while the camera
 stays within two screens of it and the zoom stays within 2^64 of when it was
 computed, so panning at depth is free.
 
+A step reads the reference at `n` and again at `n + 1`, and the second read is
+the next step's first, so the shaders carry it in a register and fetch once per
+step. The rebase branch goes back to the reference's start, which is read once
+before the loop. On the float32 delta tier, where the loop is short enough for
+the fetch to weigh in it, that runs 1.2 to 1.35 times faster; on the floatexp
+tier, where each step is an order of magnitude more arithmetic, it makes no
+measurable difference.
+
 | Zoom | Reference orbit | Pixel delta |
 | --- | --- | --- |
 | below 2^40 (about 10^12) | double | float32 |
@@ -173,8 +184,8 @@ GLSL ES 3.00 lacks `frexp` and `ldexp`.
 There is no upper zoom limit in the code, bar Pacman's. In practice the cost
 grows with depth: the iteration budget is `30 × log2 zoom`, capped at 50 000
 and then scaled by the HUD slider, to 100 000 at the most, and the reference
-orbit costs about 90 ms at 10^300. At 10^300 a 1280×800 frame is roughly 80 strips and
-under a second on an RTX 2060.
+orbit costs about 90 ms at 10^300. At 10^300 a 1280×800 frame takes under a
+second on an RTX 2060.
 
 **Webb**, **Collatz**, **Julia**, **Burning Ship**, **Perpendicular Ship**,
 **MandelBug** and **The Octopus** iterate directly in float32 up to 10^6 zoom
@@ -487,6 +498,28 @@ The usual pair, `z₀ = 0` and `c = x+yi`, is the Mandelbrot arrangement. Fix `c
 at a constant and start `z` at the pixel instead, `z₀ = x+yi`, and it draws the
 Julia set of that constant.
 
+### Earlier terms
+
+A formula may read the step before the one it is writing, and the steps behind
+that, as `zₙ₋₁`, `zₙ₋₂` and so on, up to eight back. The subscripts on the
+cards work as typed, and so does `Z_(n-1)`. `zₙ` and `zₙ₊₁` are the step the
+line already writes, so the parser drops those two and reads the rest.
+
+A step back has to start somewhere, and the line does not say where: `zₙ₊₁ =
+zₙ² + zₙ₋₁` is a different fractal for `z₋₁ = 0` than for `z₋₁ = 0.1i`. So a
+`z₋₁` field appears beside `z₀` the moment the formula reaches for it, one per
+step, and the orbit begins with those values in hand. They are written the way
+`z₀` and `c` are, and one left empty is refused rather than started at zero.
+Stop reaching that far back and the field goes, holding what it had in case
+the term comes back. An index the iteration cannot keep — `zₙ₋₉`, or `zₙ₋₁` in
+a starting value, which would have nothing to name — turns red as you type it.
+
+That is Webb, which used to be one of the two sets the editor could not write:
+`Z_(n+1) = Z_(n)^2 + Z_(n-1)` with `z₀ = x+yi` and `z₋₁ = 0`. The shader keeps
+one variable per step and shifts them each iteration, oldest first, after the
+next `z` is worked out and before any of them moves. A formula with no index
+compiles exactly as it did before, to a single `z = …`.
+
 **+ Variable**, under the pair, adds a value of your own: a letter and a
 starting value the orbit keeps for the whole run, exactly as `c` does. It is
 written the way `z₀` and `c` are, so it takes `x` and `y` as well as numbers;
@@ -525,10 +558,19 @@ twist is nothing, or `conj`, or the Burning Ship's `|Re z| + i|Im z|`, or the
 Perpendicular Ship's `Re z − i|Im z|`, or `|z|`, and it goes inside the power
 or around it, which is the difference between Burning Ship and Celtic. The
 exponent runs from 2 to 8, weighted low. Less often the draw is two powers of
-`z` rather than one, a quotient with a pole in it such as `z² + c/z²`, or one
-of `sin cos sinh cosh tan exp` around `z`, either added to a parameter or
-multiplied by one. The parameter is usually `c`, and sometimes `conj(c)`,
-`−c`, `ic`, `0.5c` or `c²`.
+`z` rather than one, a quotient with a pole in it such as `z² + c/(z² − 0.5)`,
+one of `sin cos sinh cosh tan exp` around `z`, or a step the orbit already
+took, `zₙ₋₁` or `zₙ₋₂`, carried alongside the power the way Webb carries it.
+The parameter is usually `c`, and sometimes `conj(c)`, `−c`, `ic`, `0.5c` or
+`c²`.
+
+Two of those shapes are drawn around where `z₀ = 0` would kill them. A
+divisor is always held off zero, since a plain `c/z²` divides by nothing on
+the first step and takes the whole picture with it, and a wave multiplied by
+the parameter is drawn from `cos cosh exp` alone, since `c·sin(z)` starting
+at zero stays at zero for ever. Both read as fractals under a Julia
+arrangement and as one flat colour under the usual pair, which is the
+arrangement Invent is judged in.
 
 **Tweak** moves the line already in the field one step. It reads the line
 into the same tree, changes one node, and now and then a second, then prints
@@ -536,28 +578,37 @@ it back. A step is an exponent up or down or somewhere else, a bar put around
 a term or taken off one, a `conj` added or removed, a term added or dropped,
 a `+` turned into a `−`, a function swapped for one of its family (`sin` for
 `cos`, `re` for `im`, `exp` for `log`), a number doubled, halved or negated, a
-coefficient put in front of a term, or a `z` and a `c` exchanged. A step that
-leaves no `z` has no orbit left, and one that drops the last `c` leaves every
-pixel with the same orbit, so both are drawn again rather than shown, as is a
-step that lands back on the line it started from. Each press reads what is in
-the field, so the second press works on what the first one left.
+coefficient put in front of a term, a `z` and a `c` exchanged, or an earlier
+step moved one further back or one nearer. A step that leaves the orbit with
+no `z` in it at all has nothing to iterate, and one that drops the last `c`
+leaves every pixel with the same orbit, so both are drawn again rather than
+shown, as is a step that lands back on the line it started from. Each press
+reads what is in the field, so the second press works on what the first one
+left.
 
 Neither button touches `z₀`, `c`, the variables or the name. The line changes
 and the arrangement around it stays, so a Tweak on a Julia arrangement stays
-a Julia set. **Invent Fractal**, beside Create Fractal on the menu, is the
-one exception. It opens the editor on an invented line with the usual pair,
-`z₀ = 0` and `c = x+yi`, so the formula is the only thing made up.
+a Julia set. A line that reaches further back than the last one does bring a
+`z₋₁` field with it, starting at 0, since the formula cannot be drawn without
+one; a line that stops reaching leaves the field holding what it had, as a
+typed line does. **Invent Fractal**, beside Create Fractal on the menu, is
+the one exception to the rest. It opens the editor on an invented line with
+the usual pair, `z₀ = 0` and `c = x+yi`, so the formula is the only thing made
+up.
 
 A formula drawn at random is as likely to escape everywhere or nowhere as it
 is to draw anything, so a press does not take the first line it draws. It
-draws eight, or four for a Tweak, and keeps whichever has the most fractal in
-it. The mark comes off the same depth map the survey reads, at the survey's
-opening view. A line where everything escapes, or where almost nothing does,
-scores zero. Among the rest the mark is how hard the escape count works from
-one pixel to the next: a disc of one colour with a wash behind it scores near
-zero, and the filaments along a boundary score. That is one depth pass per
-draw, about ten milliseconds, after which the winner is framed and previewed
-as a typed line is.
+draws four, or three for a Tweak, and keeps whichever has the most fractal in
+it. Each draw is surveyed the way a typed line is, and the mark is read off a
+depth map of the view the survey settled on. Reading it at the view the
+survey opens from would cost four passes fewer and throw away every line
+whose set is small: `z² + zₙ₋₁ + c` sits at 677×, and eight units wide it is
+a pixel of nothing. A picture that is all interior with its edge off the
+frame scores zero, and among the rest the mark is how hard the escape count
+works from one pixel to the next. A disc of one colour with a wash behind it
+scores near zero; the filaments along a boundary score. A draw costs about 85
+milliseconds, which is what holds the count at four, and the winner keeps the
+view it was measured in, so the preview does not survey it again.
 
 Because a tweak goes through the tree and back out, the line returns in the
 editor's own notation rather than the one it went in as, so `Z_(n+1) =
@@ -615,8 +666,9 @@ local storage, so it survives a reload but does not travel with a link, and a
 `#saved2@` link only opens for the browser that saved it.
 
 **Edit**, beside the grip on every card, opens that set in the editor with its
-formula, its two starting values and any variables it carries already in the
-fields, which is also how a built-in set reaches **Tweak**. A built-in set brings no variables, so the rows start empty. On a
+formula, its starting values and any variables it carries already in the
+fields, which is also how a built-in set reaches **Tweak**. A built-in set
+brings no variables, so those rows start empty. On a
 fractal you saved, Save replaces it where it stands, under the same id, the
 same `#saved2@` link and the same place in the menu. On a built-in set it is a
 line to start from rather than a change to the set itself. Mandelbrot stays
@@ -627,14 +679,14 @@ Most built-in sets are written out for the editor. Mandelbrot is
 `-0.74543+0.11301i`. Burning Ship is `(|re(z)| + i|im(z)|)^2 + conj(c)`,
 Perpendicular Ship is `(re(z) - i|im(z)|)^2 + c`, MandelBug is
 `re(z^2) + 2i(re(z) + im(z)) + c`, Pacman is
-`re(z)^2 - im(z^2+c)^2 + re(c) + i*im(z^2+c)`, and The Octopus is
-`(re(z) + im(c) + i(|im(z)| - re(c)))^2 + c`. Any copy iterates in float32
-like a typed formula, so it stops at 10⁶ zoom where the original hands over to
-a reference orbit.
+`re(z)^2 - im(z^2+c)^2 + re(c) + i*im(z^2+c)`, The Octopus is
+`(re(z) + im(c) + i(|im(z)| - re(c)))^2 + c`, and Webb is
+`Z_(n+1) = Z_(n)^2 + Z_(n-1)` with `z₀ = x+yi` and `z₋₁ = 0`. Any copy
+iterates in float32 like a typed formula, so it stops at 10⁶ zoom where the
+original hands over to a reference orbit.
 
-Collatz and Webb are greyed out, and the button says why. Collatz picks one of
-two formulas each step, and Webb needs the term before last. Neither is one
-formula in `z` and `c`.
+Collatz alone is greyed out, and the button says why: it picks one of two
+formulas each step, and the editor writes one.
 
 The × in the top right of a saved card removes it. It puts the question over
 the card first, and Cancel or Esc backs out. Delete drops the card, its shader and
@@ -642,7 +694,8 @@ its stored entry. Ids count up rather than filling the gap a deletion leaves,
 so an old `#saved1@` link falls back to the menu instead of opening a
 different fractal.
 
-What it reads: `z`, `c`, `x`, `y` and any variable you have added, decimal
+What it reads: `z`, `c`, `x`, `y`, `zₙ₋₁` and the steps behind it, and any
+variable you have added, decimal
 numbers, `i`, `pi` and `e`; `+ - * / ^` with brackets, two values side by
 side for multiplication, letters written together as well, so `x+yi` reads
 as `x + y·i`; `abs re im conj exp log sqrt sin cos tan sinh cosh tanh`, each of
@@ -662,9 +715,9 @@ The editor colours each line as you type. Brackets and bars take a colour from
 their nesting depth and the six colours cycle, so a pair matches and the pairs
 either side of it do not. `z`, `c`, `x`, `y` and the letters you have added,
 numbers, `i pi e`, the function names and the operators each have a colour of
-their own. The index on `zₙ₊₁` is dim, since the parser drops it, and a bracket
-or bar left open turns red, as does a name that belongs to a different field,
-such as `z` in a starting value. A layer
+their own. An index is dim, whether the parser drops it as it does `zₙ₊₁` or
+reads it as it does `zₙ₋₁`, and a bracket or bar left open turns red, as does
+a name that belongs to a different field, such as `z` in a starting value. A layer
 behind each field carries the colours; the field itself keeps the caret, the
 selection and the scrolling.
 The help line under a field prints each group in its colour, so it doubles as
@@ -677,8 +730,9 @@ over to a reference orbit. A formula can also overshoot the
 bailout or reach NaN, neither of which the smooth count survives, so a count
 it cannot read falls back to the step number. The text rides in the URL as
 `?f=` before the hash, with `?z=` and `?c=` for the starting values when they
-are not the usual pair and a `?v=k:0.5` for each variable added, so a custom
-view shares like any other.
+are not the usual pair, an `?e=` for each step the formula reaches back, in
+order from `z₋₁`, and a `?v=k:0.5` for each variable added, so a custom view
+shares like any other.
 
 ## Ported from the original
 

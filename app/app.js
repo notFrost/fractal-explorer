@@ -2,8 +2,12 @@ import { SETS, MIN_LOG_ZOOM, MIN_ITER, iterationsFor, baseIterations, iterCeilin
 import { Camera, formatZoom } from './precision.js';
 import { Renderer } from './gpu.js';
 import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palettes.js';
-import { parseFormula, parseSeed, formulaTokens, seedTokens, varGlsl, freeVarName, varNameError, printFormula } from './formula.js';
-import { frameCustom, fractalScore } from './framing.js';
+import {
+  parseFormula, parseSeed, formulaTokens, seedTokens, varGlsl, freeVarName, varNameError,
+  earlierTerms, earlierLabel, printFormula,
+} from './formula.js';
+import { partsKey } from './shaders/custom.js';
+import { frameCustom, sizeUp } from './framing.js';
 import { inventFormula, tweakFormula } from './invent.js';
 import { pickSpot } from './dive.js';
 import { drawPlane } from './plane.js';
@@ -37,6 +41,9 @@ const state = {
   formula: '',
   seedZ: '',
   seedC: '',
+  // Starting values for zₙ₋₁ and the steps behind it, in that order, for a
+  // formula that reaches back. Ride in the URL as a ?e= each.
+  earlier: [],
   vars: [],
 };
 
@@ -97,6 +104,9 @@ const editor = {
   input: { formula: $('#formula'), seedZ: $('#seed-z'), seedC: $('#seed-c') },
   ink: { formula: $('#formula-ink'), seedZ: $('#seed-z-ink'), seedC: $('#seed-c-ink') },
   seeds: $('#editor-seeds'),
+  // The cell the earlier starting values are laid before, so they read in
+  // order after z₀ rather than after c.
+  cSeed: $('#seed-c').closest('.editor-seed'),
   addVar: $('#add-var'),
   known: $('#formula-vars'),
   invent: $('#invent'),
@@ -874,6 +884,7 @@ const DEFAULTS = {
 };
 const NEW_VAR_SEED = '0';
 const VAR_SEED_HINT = 'x+yi';
+const EARLIER_SEED = '0';
 const PREVIEW_MAX_PX = 640;
 const PREVIEW_DELAY = 250;
 const NEST_COLOURS = 6;
@@ -897,6 +908,12 @@ let opensWith = null;
 const overwrites = () => (SETS[openedFrom]?.custom ? openedFrom : null);
 
 const varRows = [];
+
+// One row per step the formula reaches back, and beside them what each row
+// last held, so a term dropped and typed again comes back with its value
+// rather than with a bare 0.
+const earlierRows = [];
+const earlierKept = [];
 
 const TOKEN_CLASS = {
   var: 'tok-var',
@@ -929,7 +946,7 @@ function repaint() {
     const input = editor.input[f.key];
     paintInto(editor.ink[f.key], input, f.tokens(input.value, extras));
   }
-  for (const row of varRows) {
+  for (const row of [...earlierRows, ...varRows]) {
     paintInto(row.ink, row.seed, seedTokens(row.seed.value, extras));
   }
   editor.known.textContent = ['z', 'c', 'x', 'y', ...extras.filter(Boolean)].join(' ');
@@ -937,12 +954,14 @@ function repaint() {
 
 function editorChanged() {
   editor.error.textContent = '';
+  showEarlierRows();
   repaint();
   schedulePreview();
 }
 
 const editorTexts = () => ({
   ...Object.fromEntries(FIELDS.map((f) => [f.key, editor.input[f.key].value])),
+  earlier: earlierRows.map((row) => row.seed.value),
   vars: varRows.map((row) => ({ name: row.name.value, seed: row.seed.value })),
 });
 
@@ -951,6 +970,9 @@ const readVars = (texts) => (Array.isArray(texts.vars) ? texts.vars : []).map((v
   seed: String(v.seed ?? '').trim(),
 }));
 
+const readEarlier = (texts) =>
+  (Array.isArray(texts.earlier) ? texts.earlier : []).map((t) => String(t ?? '').trim());
+
 function parseCustom(texts) {
   const vars = readVars(texts);
   const names = vars.map((v) => v.name);
@@ -958,12 +980,26 @@ function parseCustom(texts) {
     const err = varNameError(v.name, names.filter((_, other) => other !== at));
     if (err) throw new Error(`variables: ${err}`);
   }
-  const parsed = { vars: [] };
+  const parsed = { earlier: [], vars: [] };
   for (const f of FIELDS) {
     try {
       parsed[f.key] = f.parse(String(texts[f.key] ?? '').trim(), names);
     } catch (err) {
       throw new Error(`${f.label}: ${err.message}`);
+    }
+  }
+  // A formula that reaches back does not say where the orbit begins until
+  // every step it reaches for has a value, so a missing one is refused
+  // rather than started at zero behind the user's back.
+  const given = readEarlier(texts);
+  for (let steps = 1; steps <= parsed.formula.earlier; steps++) {
+    const text = given[steps - 1] ?? '';
+    const label = earlierLabel(steps);
+    if (!text) throw new Error(`${label}: the formula asks for it, so it needs a starting value`);
+    try {
+      parsed.earlier.push(parseSeed(text, names));
+    } catch (err) {
+      throw new Error(`${label}: ${err.message}`);
     }
   }
   for (const v of vars) {
@@ -983,6 +1019,7 @@ const shaderParts = (parsed) => ({
     { name: 'c', glsl: parsed.seedC.glsl },
     { name: 'z', glsl: parsed.seedZ.glsl },
   ],
+  earlier: parsed.earlier.map((s) => s.glsl),
 });
 
 const DEFAULT_GLSL = Object.fromEntries(FIELDS.map((f) => [f.key, f.parse(DEFAULTS[f.key]).glsl]));
@@ -994,6 +1031,7 @@ function customLabel(parsed) {
   for (const f of SEED_FIELDS) {
     if (!usual(parsed, f)) parts.push(`${f.label} = ${parsed[f.key].text}`);
   }
+  parsed.earlier.forEach((s, at) => parts.push(`${earlierLabel(at + 1)} = ${s.text}`));
   for (const v of parsed.vars) parts.push(`${v.name} = ${v.seed.text}`);
   return parts.join('  ·  ');
 }
@@ -1007,7 +1045,9 @@ function usualHome(parsed) {
   const parameterMoves = movesWithPixel(parsed.seedC.glsl)
     || movesWithPixel(parsed.formula.glsl)
     || parsed.vars.some((v) => movesWithPixel(v.seed.glsl));
-  return !parameterMoves && movesWithPixel(parsed.seedZ.glsl)
+  const orbitMoves = movesWithPixel(parsed.seedZ.glsl)
+    || parsed.earlier.some((s) => movesWithPixel(s.glsl));
+  return !parameterMoves && orbitMoves
     ? { x: 0, y: 0, zoom: 100 }
     : { x: -0.7, y: 0, zoom: 135 };
 }
@@ -1021,6 +1061,8 @@ function writeCustomUrl(texts, parsed) {
     if (usual(parsed, f)) url.searchParams.delete(f.param);
     else url.searchParams.set(f.param, texts[f.key]);
   }
+  url.searchParams.delete('e');
+  for (const text of texts.earlier) url.searchParams.append('e', text);
   url.searchParams.delete('v');
   for (const v of texts.vars) url.searchParams.append('v', `${v.name}:${v.seed}`);
   history.replaceState(null, '', url);
@@ -1028,8 +1070,14 @@ function writeCustomUrl(texts, parsed) {
 
 const trimTexts = (texts) => ({
   ...Object.fromEntries(FIELDS.map((f) => [f.key, String(texts[f.key] ?? '').trim()])),
+  earlier: readEarlier(texts),
   vars: readVars(texts),
 });
+
+// What the formula turned out to ask for, so a starting value left over from
+// a longer formula is not carried into the URL or into a saved fractal.
+const asParsed = (trimmed, parsed) =>
+  ({ ...trimmed, earlier: trimmed.earlier.slice(0, parsed.earlier.length) });
 
 function applyCustom(texts) {
   if (!renderer) return 'this browser has no WebGL2';
@@ -1040,17 +1088,18 @@ function applyCustom(texts) {
   } catch (err) {
     return err.message;
   }
+  const kept = asParsed(trimmed, parsed);
   const parts = shaderParts(parsed);
   try {
     renderer.setCustom('custom', parts);
   } catch {
     return 'the GPU would not compile that formula';
   }
-  committed = { texts: trimmed, parts };
-  Object.assign(state, trimmed);
+  committed = { texts: kept, parts };
+  Object.assign(state, kept);
   SETS.custom.formula = customLabel(parsed);
   SETS.custom.home = customHome(parsed, parts);
-  writeCustomUrl(trimmed, parsed);
+  writeCustomUrl(kept, parsed);
   return null;
 }
 
@@ -1073,7 +1122,9 @@ function drawPreview(parts, home) {
   c.getContext('2d').drawImage(canvas, 0, 0);
 }
 
-function updatePreview() {
+// `framed` is the view a draw was already measured in, so a press that just
+// surveyed several formulas does not survey the winner over again.
+function updatePreview(framed = null) {
   if (!renderer || mode !== 'editor') return;
   let parsed;
   try {
@@ -1083,10 +1134,10 @@ function updatePreview() {
     return;
   }
   const parts = shaderParts(parsed);
-  const key = [parts.iter, ...parts.seeds.map((s) => `${s.name}=${s.glsl}`), state.palette].join('|');
+  const key = `${partsKey(parts)}|${state.palette}`;
   if (key !== previewKey) {
     try {
-      drawPreview(parts, customHome(parsed, parts));
+      drawPreview(parts, framed ?? customHome(parsed, parts));
     } catch {
       preview.box.classList.add('stale');
       return;
@@ -1099,7 +1150,7 @@ function updatePreview() {
 
 function schedulePreview() {
   clearTimeout(previewTimer);
-  previewTimer = setTimeout(updatePreview, PREVIEW_DELAY);
+  previewTimer = setTimeout(() => updatePreview(), PREVIEW_DELAY);
 }
 
 // ---------- Inventing a formula, and moving one along ----------
@@ -1107,50 +1158,60 @@ function schedulePreview() {
 // A formula drawn at random is as likely to escape everywhere or nowhere as
 // it is to draw anything, and so is a formula a tweak has just moved. So the
 // press draws several and keeps whichever one framing.js found the most
-// fractal in. Each draw costs one small depth pass; the winner is framed and
-// previewed once, as a typed line is.
-const INVENT_DRAWS = 8;
-const TWEAK_DRAWS = 4;
+// fractal in. Each draw is a survey and a read of the view it settles on,
+// about 85 ms, which is what holds the count this low.
+const INVENT_DRAWS = 4;
+const TWEAK_DRAWS = 3;
 
-function bestDraw(draws, nextTexts) {
+const NOTHING_DREW = 'none of those drew anything';
+
+// A line that reaches further back than the last one asks for a starting
+// value the editor has no row for yet, so the draw carries one. Values
+// already in the rows stay, including the ones a shorter line stops asking
+// for, which are the ones the rows come back with.
+function earlierFor(base, formula) {
+  const given = [...base.earlier];
+  while (given.length < earlierTerms(formula)) given.push(EARLIER_SEED);
+  return given;
+}
+
+function bestDraw(draws, base, nextLine) {
   let best = null;
+  let framed = null;
   let mark = -1;
   let trouble = null;
   for (let draw = 0; draw < draws; draw++) {
-    const texts = nextTexts();
-    if (!texts) continue;
-    let parts;
+    const formula = nextLine();
+    if (!formula) continue;
+    const texts = { ...base, formula, earlier: earlierFor(base, formula) };
+    let parsed;
     try {
-      parts = shaderParts(parseCustom(texts));
+      parsed = parseCustom(texts);
     } catch (err) {
       trouble = err.message;
       continue;
     }
-    const score = fractalScore(renderer, parts);
+    const { home, score } = sizeUp(renderer, shaderParts(parsed), usualHome(parsed));
     if (score > mark) {
       best = texts;
+      framed = home;
       mark = score;
     }
   }
-  return { texts: best, trouble };
+  return { texts: best, framed, trouble };
 }
 
-const NOTHING_DREW = 'none of those drew anything';
-
-// The line changes; the starting values, the variables and the name stay as
-// they are, so an invented formula lands in the arrangement already set up.
+// The line changes and the starting values, the variables and the name stay
+// as they are, so an invented formula lands in the arrangement already set
+// up.
 function drawFormula(draws, nextLine) {
-  const base = editorTexts();
-  const { texts, trouble } = bestDraw(draws, () => {
-    const formula = nextLine();
-    return formula && { ...base, formula };
-  });
+  const { texts, framed, trouble } = bestDraw(draws, editorTexts(), nextLine);
   if (!texts) return trouble ?? NOTHING_DREW;
   for (const f of FIELDS) editor.input[f.key].value = texts[f.key];
-  editor.error.textContent = '';
-  repaint();
+  openEarlierRows(texts.earlier);
+  editorChanged();
   clearTimeout(previewTimer);
-  updatePreview();
+  updatePreview(framed);
   return null;
 }
 
@@ -1184,6 +1245,7 @@ function showEditor() {
   for (const f of FIELDS) {
     editor.input[f.key].value = opensWith?.[f.key] ?? (state[f.key] || DEFAULTS[f.key]);
   }
+  openEarlierRows(opensWith ? opensWith.earlier ?? [] : state.earlier ?? []);
   showVarRows(opensWith ? opensWith.vars ?? [] : state.vars ?? []);
   opensWith = null;
   editor.error.textContent = '';
@@ -1235,6 +1297,63 @@ function editFractal(set) {
   opensWith = SETS[set].edit;
   editor.name.value = SETS[set].custom ? SETS[set].name : '';
   showEditor();
+}
+
+function makeEarlierRow(at, start) {
+  const steps = at + 1;
+  const id = `seed-earlier-${steps}`;
+
+  const cell = document.createElement('div');
+  cell.className = 'editor-seed';
+  const label = document.createElement('label');
+  label.className = 'editor-label';
+  label.htmlFor = id;
+  label.textContent = earlierLabel(steps);
+
+  const field = document.createElement('div');
+  field.className = 'editor-field';
+  const ink = document.createElement('div');
+  ink.className = 'editor-ink';
+  ink.setAttribute('aria-hidden', 'true');
+  const seed = document.createElement('input');
+  seed.id = id;
+  seed.type = 'text';
+  seed.className = 'input editor-input';
+  seed.spellcheck = false;
+  seed.autocapitalize = 'off';
+  seed.placeholder = EARLIER_SEED;
+  seed.setAttribute('aria-describedby', 'seed-help');
+  seed.value = start;
+  field.append(ink, seed);
+  cell.append(label, field);
+
+  earlierRows.push({ cell, seed, ink });
+  seed.addEventListener('input', editorChanged);
+  seed.addEventListener('scroll', () => { ink.scrollLeft = seed.scrollLeft; });
+  return cell;
+}
+
+// The rows follow the formula: one appears the moment it reaches a step
+// further back, and goes when it stops asking.
+function showEarlierRows() {
+  const wanted = earlierTerms(editor.input.formula.value);
+  while (earlierRows.length > wanted) {
+    const row = earlierRows.pop();
+    earlierKept[earlierRows.length] = row.seed.value;
+    row.cell.remove();
+  }
+  while (earlierRows.length < wanted) {
+    const at = earlierRows.length;
+    editor.seeds.insertBefore(makeEarlierRow(at, earlierKept[at] ?? EARLIER_SEED), editor.cSeed);
+  }
+}
+
+function openEarlierRows(texts) {
+  for (const row of earlierRows) row.cell.remove();
+  earlierRows.length = 0;
+  earlierKept.length = 0;
+  earlierKept.push(...texts);
+  showEarlierRows();
 }
 
 function makeVarRow({ name, seed }) {
@@ -1336,7 +1455,8 @@ $('#create').addEventListener('click', () => {
 // whatever the editor was last left holding, so the draw is judged on a
 // parameter plane and the formula is the only thing that was made up.
 $('#invent-fractal').addEventListener('click', () => {
-  const { texts } = bestDraw(INVENT_DRAWS, () => ({ ...DEFAULTS, vars: [], formula: inventedLine() }));
+  const base = { ...DEFAULTS, earlier: [], vars: [] };
+  const { texts } = bestDraw(INVENT_DRAWS, base, inventedLine);
   if (!texts) {
     $('#menu-note').textContent = NOTHING_DREW;
     return;
@@ -1377,7 +1497,7 @@ function registerFractal(fractal) {
     name: fractal.name,
     formula: customLabel(parsed),
     home: customHome(parsed, parts),
-    edit: trimTexts(fractal),
+    edit: asParsed(trimTexts(fractal), parsed),
   });
   return null;
 }
@@ -2183,6 +2303,7 @@ const params = new URLSearchParams(location.search);
 if (params.get('f')) {
   applyCustom({
     ...Object.fromEntries(FIELDS.map((f) => [f.key, params.get(f.param) ?? DEFAULTS[f.key]])),
+    earlier: params.getAll('e'),
     vars: params.getAll('v').map((pair) => {
       const at = pair.indexOf(':');
       return at < 0 ? { name: pair, seed: '' } : { name: pair.slice(0, at), seed: pair.slice(at + 1) };

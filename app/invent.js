@@ -13,8 +13,8 @@
 // caller draws several and keeps the best.
 
 import {
-  numeral, constant, variable, apply, bars, negate, plus, minus, times, over, power,
-  branches, regrow, printFormula, MAX_LENGTH,
+  numeral, constant, variable, earlierZ, apply, bars, negate, plus, minus, times, over, power,
+  branches, regrow, printFormula, MAX_LENGTH, MAX_EARLIER,
 } from './formula.js';
 
 const pick = (random, list) => list[Math.floor(random() * list.length)];
@@ -31,6 +31,13 @@ function shuffled(list, random) {
 
 const z = () => variable('z');
 const c = () => variable('c');
+
+// The line may keep earlier steps of the orbit, as Webb does, but a draw
+// reaching eight of them back would be a formula nobody could read and eight
+// starting values to fill in.
+const FURTHEST_BACK = Math.min(2, MAX_EARLIER);
+
+const backStep = (random) => earlierZ(1 + Math.floor(random() * FURTHEST_BACK));
 
 // ---------- Drawing a formula ----------
 
@@ -58,6 +65,7 @@ const SMALL_POWERS = [2, 2, 3, 3, 4];
 const WEIGHTS = [0.25, 0.5, 0.75, 1.5, 2, 3];
 const OFFSETS = [0.25, 0.5, 1, 2];
 const WAVES = ['sin', 'cos', 'sinh', 'cosh', 'tan', 'exp'];
+const STANDING_WAVES = ['cos', 'cosh', 'exp'];
 
 const scaled = (random, term) => times(numeral(pick(random, WEIGHTS)), term, true);
 
@@ -98,22 +106,40 @@ function twoTerms(random) {
   return plus(joined(random)(driver(random), lesser), tail(random));
 }
 
-// A pole in the middle of the orbit. z² + c/z² is the best known of these,
-// and the divisor is kept away from zero in the other form so the whole
-// picture is not one singularity.
+// A pole somewhere in the orbit. The divisor is always held off zero, since
+// z starts there: c/z² is the best known of these and it is also the one that
+// divides by nothing on the first step and takes the picture with it.
 function quotient(random) {
-  const divisor = power(z(), numeral(pick(random, SMALL_POWERS)));
+  const divisor = joined(random)(
+    power(z(), numeral(pick(random, SMALL_POWERS))),
+    numeral(pick(random, OFFSETS)),
+  );
   return chance(random, 0.5)
     ? plus(driver(random), over(c(), divisor))
-    : plus(over(driver(random), joined(random)(divisor, numeral(pick(random, OFFSETS)))), c());
+    : plus(over(driver(random), divisor), c());
 }
 
+// Webb's shape: the step before last carried alongside the square. The pixel
+// still enters through c, since a line that only reads earlier steps starts
+// every orbit from the same pair of values.
+function reachesBack(random) {
+  const carried = chance(random, 0.5) ? backStep(random) : scaled(random, backStep(random));
+  return plus(joined(random)(driver(random), carried), tail(random));
+}
+
+// A wave multiplied by the parameter has to be one that is not zero at zero,
+// or an orbit starting at zero never leaves it. Added to a parameter, any of
+// them will do.
 function wave(random) {
-  const shape = apply(pick(random, WAVES), pick(random, TWISTS)(z()));
-  return chance(random, 0.5) ? times(c(), shape) : plus(shape, tail(random));
+  if (chance(random, 0.5)) return times(c(), apply(pick(random, STANDING_WAVES), z()));
+  return plus(apply(pick(random, WAVES), pick(random, TWISTS)(z())), tail(random));
 }
 
-const SHAPES = [polynomial, polynomial, polynomial, polynomial, twoTerms, twoTerms, quotient, wave];
+const SHAPES = [
+  polynomial, polynomial, polynomial, polynomial,
+  twoTerms, twoTerms,
+  quotient, wave, reachesBack,
+];
 
 export const inventFormula = (random = Math.random) => pick(random, SHAPES)(random);
 
@@ -143,6 +169,10 @@ function replaceAt(tree, target, change) {
 const holds = (tree, name) =>
   nodesOf(tree).some(({ node }) => node.k === 'var' && node.name === name);
 
+// An earlier step is the orbit too, so z^2 tweaked into zₙ₋₁^2 still moves.
+const movesOrbit = (tree) =>
+  holds(tree, 'z') || nodesOf(tree).some(({ node }) => node.k === 'earlier');
+
 const wrappedIn = (parent, fn) => Boolean(parent) && parent.k === 'call' && parent.fn === fn;
 
 const isExponent = (node, parent) => Boolean(parent) && parent.k === 'pow' && parent.b === node;
@@ -170,9 +200,14 @@ const FAMILIES = [
 
 const familyOf = (fn) => FAMILIES.find((family) => family.includes(fn));
 
-const sprig = (random) => (chance(random, 0.3)
-  ? numeral(pick(random, OFFSETS))
-  : scaled(random, power(z(), numeral(pick(random, SMALL_POWERS)))));
+const SPRIGS = [
+  (random) => numeral(pick(random, OFFSETS)),
+  (random) => scaled(random, backStep(random)),
+  (random) => scaled(random, power(z(), numeral(pick(random, SMALL_POWERS)))),
+  (random) => scaled(random, power(z(), numeral(pick(random, SMALL_POWERS)))),
+];
+
+const sprig = (random) => pick(random, SPRIGS)(random);
 
 // One small change each, and each one leaves a formula that still reads. What
 // a change cannot promise is that the picture survives it, so the caller
@@ -229,6 +264,10 @@ const TWEAKS = [
     change: (node) => variable(node.name === 'z' ? 'c' : 'z'),
   },
   {
+    fits: (node) => node.k === 'earlier' && FURTHEST_BACK > 1,
+    change: (node) => earlierZ(node.steps > 1 ? node.steps - 1 : 2),
+  },
+  {
     fits: (node, parent) => (node.k === 'pow' || node.k === 'call') && parent?.k !== 'mul',
     change: (node, random) => scaled(random, node),
   },
@@ -258,7 +297,7 @@ const DEEPEST = 12;
 const deepest = (node) => 1 + Math.max(0, ...branches(node).map((field) => deepest(node[field])));
 
 // A tweak that drops the last c leaves every pixel with the same orbit, and
-// one that drops the last z leaves no orbit at all. Either way there is
+// one that drops the last z, earlier steps and all, leaves no orbit at all. Either way there is
 // nothing to look at, so the draw is taken again. Null when a dozen draws all
 // came back to where they started.
 export function tweakFormula(tree, random = Math.random) {
@@ -268,7 +307,7 @@ export function tweakFormula(tree, random = Math.random) {
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
     let next = stepped(tree, random);
     if (chance(random, 0.4)) next = stepped(next, random);
-    if (!holds(next, 'z') || (needsC && !holds(next, 'c')) || deepest(next) > room) continue;
+    if (!movesOrbit(next) || (needsC && !holds(next, 'c')) || deepest(next) > room) continue;
     const line = printFormula(next);
     if (line !== was && line.length <= MAX_LENGTH) return next;
   }

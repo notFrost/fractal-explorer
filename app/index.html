@@ -69,7 +69,7 @@
                  placeholder="Z_(n+1) = Z_(n)^2 + C" aria-describedby="formula-help make-help" />
         </div>
         <p id="make-help" class="editor-help">
-          <span><b>Invent</b> makes one up, out of powers, bars, waves and c</span>
+          <span><b>Invent</b> makes one up, out of powers, bars, waves, earlier steps and c</span>
           <span><b>Tweak</b> moves this one a step: an exponent, a bar, a term</span>
           <span>each press draws again</span>
         </p>
@@ -81,6 +81,7 @@
           <span class="tok-nest-0">( ) and | | nest in colour</span>
           <span class="tok-func">abs re im conj exp log sqrt sin cos tan sinh cosh tanh</span>
           <span>|z| is abs z</span>
+          <span><span class="tok-var">z</span><span class="tok-index">ₙ₋₁</span> is the step before, back to <span class="tok-var">z</span><span class="tok-index">ₙ₋₈</span></span>
         </p>
 
         <div class="editor-seeds" id="editor-seeds">
@@ -108,6 +109,7 @@
           <span class="tok-var">x y</span>
           <span>the real and imaginary parts of the point being checked, in a starting value or the formula</span>
           <span>z₀ = 0 with c = x+yi is the Mandelbrot set</span>
+          <span>a z₋₁ appears for each step the formula reaches back, and the orbit starts there</span>
           <span>an added variable takes x and y as well, and holds its value as c does</span>
         </p>
 

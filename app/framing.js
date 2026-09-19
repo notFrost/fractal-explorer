@@ -129,15 +129,13 @@ export function frameCustom(renderer, parts, fallback) {
 // ---------- Is there a fractal here at all ----------
 
 // The generator and the tweaker put several formulas up against each other
-// and keep the best, and this is the mark each one gets. One opening view,
-// one read back, no closing in: a formula worth keeping nearly always has
-// something in the widest view the survey starts from, and the winner is
-// framed properly afterwards like any other.
+// and keep the best, and this is the mark each one gets. It is read at the
+// view the survey settled on rather than at the view it opened from: a set
+// that sits at 600× is a pixel of nothing in the opening view, and a mark
+// taken there would throw away every formula whose set is small.
 
-// Below the first, whatever never escapes is a speck or a rounding error;
-// above the second, the picture is interior with its edge off the frame.
-const LEAST_INSIDE = 0.002;
-const MOST_INSIDE = 0.75;
+// Above this the picture is interior with its edge off the frame.
+const MOST_INSIDE = 0.9;
 
 const insideShare = (depth) => {
   let held = 0;
@@ -161,16 +159,17 @@ function detail(depth) {
   return total / ((WIDE - 2) * (HIGH - 2));
 }
 
-// Zero for a formula with nothing to see, and for one the GPU would not draw.
-export function fractalScore(renderer, parts) {
-  const cam = surveyCamera(0, 0, OPENING_ZOOM);
-  let depth = null;
+// Where the formula's fractal is and how much of one it is, in one go, since
+// the second answer is read off the first. Zero for a formula with nothing to
+// see, and for one the GPU would not draw.
+export function sizeUp(renderer, parts, fallback) {
   try {
-    depth = renderer?.depthMap(parts, cam, WIDE, HIGH, iterationsFor(cam.lz, 1, 'custom'));
+    const home = survey(renderer, parts, fallback);
+    const cam = surveyCamera(home.x, home.y, home.zoom);
+    const depth = renderer.depthMap(parts, cam, WIDE, HIGH, iterationsFor(cam.lz, 1, 'custom'));
+    if (!depth) return { home, score: 0 };
+    return { home, score: insideShare(depth) > MOST_INSIDE ? 0 : detail(depth) };
   } catch {
-    return 0;
+    return { home: fallback, score: 0 };
   }
-  if (!depth) return 0;
-  const inside = insideShare(depth);
-  return inside < LEAST_INSIDE || inside > MOST_INSIDE ? 0 : detail(depth);
 }

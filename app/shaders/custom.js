@@ -1,3 +1,5 @@
+import { earlierGlsl } from '../formula.js';
+
 export const CUSTOM_LIB = `
 vec2 cdiv(vec2 a, vec2 b) { return vec2(dot(a, b), a.y * b.x - a.x * b.y) / dot(b, b); }
 vec2 cre(vec2 z) { return vec2(z.x, 0.0); }
@@ -37,13 +39,32 @@ vec2 ccosh(vec2 z) { return vec2(cosh(z.x) * cos(z.y), sinh(z.x) * sin(z.y)); }
 vec2 ctanh(vec2 z) { return cdiv(csinh(z), ccosh(z)); }
 `;
 
-function escapeLib({ iter, seeds }) {
-  const start = seeds.map(({ name, glsl }) => `  vec2 ${name} = ${glsl};`).join('\n');
+// A formula that reads zₙ₋₁ and behind it keeps those steps in variables of
+// their own. The next z is worked out before any of them moves, and then each
+// takes the value of the step in front of it, oldest first so nothing is
+// overwritten while it is still needed.
+const carry = (iter, depth) => [
+  `    vec2 nz = ${iter};`,
+  ...Array.from({ length: depth }, (_, at) => {
+    const steps = depth - at;
+    return `    ${earlierGlsl(steps)} = ${steps > 1 ? earlierGlsl(steps - 1) : 'z'};`;
+  }),
+  '    z = nz;',
+].join('\n');
+
+export const partsKey = ({ iter, seeds, earlier = [] }) =>
+  [iter, ...seeds.map((s) => `${s.name}=${s.glsl}`), ...earlier].join('|');
+
+function escapeLib({ iter, seeds, earlier = [] }) {
+  const start = [
+    ...seeds.map(({ name, glsl }) => `  vec2 ${name} = ${glsl};`),
+    ...earlier.map((glsl, at) => `  vec2 ${earlierGlsl(at + 1)} = ${glsl};`),
+  ].join('\n');
   return CUSTOM_LIB + `
 float escape(vec2 p) {
 ${start}
   for (int n = 0; n < u_maxIter; n++) {
-    z = ${iter};
+${earlier.length ? carry(iter, earlier.length) : `    z = ${iter};`}
     float zz = dot(z, z);
     if (!(zz < 1e4)) {
       float t = smoothT(n + 1, log(zz));

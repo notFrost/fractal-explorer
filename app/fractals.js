@@ -48,7 +48,12 @@ export const SETS = {
     name: 'Webb',
     formula: 'zₙ₊₁ ← zₙ² + zₙ₋₁',
     home: { x: 0, y: 0, zoom: 100 },
-    unwritable: 'Webb needs the term before last, and the editor carries only zₙ.',
+    edit: {
+      formula: 'Z_(n+1) = Z_(n)^2 + Z_(n-1)',
+      seedZ: 'x+yi',
+      seedC: 'x+yi',
+      earlier: ['0'],
+    },
     bookmarks: [],
   },
   julia: {
