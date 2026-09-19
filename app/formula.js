@@ -56,7 +56,7 @@ export function varNameError(name, others) {
   return null;
 }
 
-const MAX_LENGTH = 240;
+export const MAX_LENGTH = 240;
 const MAX_NODES = 400;
 const MAX_DEPTH = 48;
 
@@ -123,9 +123,9 @@ function lex(s) {
   return out;
 }
 
-function letterValues(name, mode) {
+function letterNodes(name, mode) {
   const parts = [...name].map((ch) => (
-    mode.vars[ch] ? complex(mode.vars[ch]) : CONSTS[ch] ? CONSTS[ch]() : null
+    mode.vars[ch] ? variable(ch) : CONSTS[ch] ? constant(ch) : null
   ));
   return parts.every(Boolean) ? parts : null;
 }
@@ -133,13 +133,47 @@ function letterValues(name, mode) {
 const splitsIntoLetters = (name, mode) =>
   name.length > 1 && [...name].every((ch) => mode.vars[ch] || CONSTS[ch] || mode.strangers.has(ch));
 
-function compile(tokens, mode) {
+// ---------- The tree a line reads into ----------
+
+// The parser builds this and the GLSL comes off it, so invent.js can put a
+// formula together and rearrange one without a grammar of its own. `tight` on
+// a product and `bars` on an abs are how the line was written rather than
+// what it means; the printer keeps them, so a formula comes back out in the
+// notation it went in as.
+
+export const numeral = (v) => ({ k: 'num', v });
+export const constant = (name) => ({ k: 'const', name });
+export const variable = (name) => ({ k: 'var', name });
+export const apply = (fn, arg) => ({ k: 'call', fn, arg });
+export const bars = (arg) => ({ k: 'call', fn: 'abs', arg, bars: true });
+export const negate = (a) => ({ k: 'neg', a });
+export const plus = (a, b) => ({ k: 'add', op: '+', a, b });
+export const minus = (a, b) => ({ k: 'add', op: '-', a, b });
+export const times = (a, b, tight = false) => ({ k: 'mul', a, b, tight });
+export const over = (a, b) => ({ k: 'div', a, b });
+export const power = (a, b) => ({ k: 'pow', a, b });
+
+const BRANCHES = {
+  call: ['arg'], neg: ['a'], add: ['a', 'b'], mul: ['a', 'b'], div: ['a', 'b'], pow: ['a', 'b'],
+};
+
+export const branches = (node) => BRANCHES[node.k] ?? [];
+
+export const regrow = (node, kids) => ({
+  ...node,
+  ...Object.fromEntries(branches(node).map((field, at) => [field, kids[at]])),
+});
+
+function build(tokens, mode) {
   let i = 0;
   let nodes = 0;
   let openBars = 0;
 
   const peek = () => tokens[i];
-  const grow = () => { if (++nodes > MAX_NODES) fail('that formula has too many terms'); };
+  const grow = (node) => {
+    if (++nodes > MAX_NODES) fail('that formula has too many terms');
+    return node;
+  };
   const eat = (v) => {
     const t = tokens[i];
     if (t && t.t === 'op' && t.v === v) { i++; return true; }
@@ -150,58 +184,20 @@ function compile(tokens, mode) {
     !!t && (t.t === 'num' || t.t === 'name'
       || (t.t === 'op' && (t.v === '(' || (t.v === '|' && openBars === 0))));
 
-  function insideBrackets(parse) {
+  function insideBrackets(read) {
     const outer = openBars;
     openBars = 0;
-    const v = parse();
+    const v = read();
     openBars = outer;
     return v;
-  }
-
-  function call(name, arg) {
-    grow();
-    return complex(`${FUNCS[name]}(${arg.code})`);
-  }
-
-  function sum(a, b, op) {
-    grow();
-    if (a.num !== null && b.num !== null) return real(op === '+' ? a.num + b.num : a.num - b.num);
-    return complex(`(${a.code} ${op} ${b.code})`);
-  }
-
-  function product(a, b) {
-    grow();
-    if (a.num !== null && b.num !== null) return real(a.num * b.num);
-    if (a.num !== null) return complex(`(${glslFloat(a.num)} * ${b.code})`);
-    if (b.num !== null) return complex(`(${a.code} * ${glslFloat(b.num)})`);
-    return complex(`cmul(${a.code}, ${b.code})`);
-  }
-
-  function quotient(a, b) {
-    grow();
-    if (b.num !== null) {
-      if (b.num === 0) fail('division by zero');
-      return a.num !== null ? real(a.num / b.num) : complex(`(${a.code} / ${glslFloat(b.num)})`);
-    }
-    return complex(`cdiv(${a.code}, ${b.code})`);
-  }
-
-  function power(a, b) {
-    grow();
-    if (b.num !== null && Number.isInteger(b.num) && Math.abs(b.num) <= 64) {
-      if (b.num === 1) return a;
-      if (b.num === 2) return complex(`csq(${a.code})`);
-      return complex(`cpowi(${a.code}, ${b.num})`);
-    }
-    return complex(`cpow(${a.code}, ${b.code})`);
   }
 
   function expr(depth) {
     if (depth > MAX_DEPTH) fail('that formula nests too deeply');
     let a = term(depth + 1);
     for (;;) {
-      if (eat('+')) a = sum(a, term(depth + 1), '+');
-      else if (eat('-')) a = sum(a, term(depth + 1), '-');
+      if (eat('+')) a = grow(plus(a, term(depth + 1)));
+      else if (eat('-')) a = grow(minus(a, term(depth + 1)));
       else return a;
     }
   }
@@ -209,9 +205,9 @@ function compile(tokens, mode) {
   function term(depth) {
     let a = unary(depth);
     for (;;) {
-      if (eat('*')) a = product(a, unary(depth + 1));
-      else if (eat('/')) a = quotient(a, unary(depth + 1));
-      else if (startsValue(peek())) a = product(a, unary(depth + 1));
+      if (eat('*')) a = grow(times(a, unary(depth + 1)));
+      else if (eat('/')) a = grow(over(a, unary(depth + 1)));
+      else if (startsValue(peek())) a = grow(times(a, unary(depth + 1), true));
       else return a;
     }
   }
@@ -219,19 +215,15 @@ function compile(tokens, mode) {
   function unary(depth) {
     if (depth > MAX_DEPTH) fail('that formula nests too deeply');
     if (eat('+')) return unary(depth + 1);
-    if (eat('-')) {
-      const v = unary(depth + 1);
-      grow();
-      return v.num !== null ? real(-v.num) : complex(`(-${v.code})`);
-    }
+    if (eat('-')) return grow(negate(unary(depth + 1)));
     const a = atom(depth);
-    return eat('^') ? power(a, unary(depth + 1)) : a;
+    return eat('^') ? grow(power(a, unary(depth + 1))) : a;
   }
 
   function atom(depth) {
     const t = peek();
     if (!t) fail('the formula stops early');
-    if (t.t === 'num') { i++; return real(t.v); }
+    if (t.t === 'num') { i++; return numeral(t.v); }
     if (t.t === 'name') {
       i++;
       const name = t.v;
@@ -240,13 +232,13 @@ function compile(tokens, mode) {
         const arg = insideBrackets(() => expr(depth + 1));
         if (eat(',')) fail(`${name} takes one value`);
         if (!eat(')')) fail(`the bracket after ${name} is not closed`);
-        return call(name, arg);
+        return grow(apply(name, arg));
       }
-      if (mode.vars[name]) return complex(mode.vars[name]);
-      if (CONSTS[name]) return CONSTS[name]();
+      if (mode.vars[name]) return variable(name);
+      if (CONSTS[name]) return constant(name);
       if (mode.strangers.has(name)) fail(mode.message);
-      const letters = name.length > 1 ? letterValues(name, mode) : null;
-      if (letters) return letters.reduce((a, b) => product(a, b));
+      const letters = name.length > 1 ? letterNodes(name, mode) : null;
+      if (letters) return letters.reduce((a, b) => grow(times(a, b, true)));
       if ([...name].some((ch) => mode.strangers.has(ch))) fail(mode.message);
       fail(`“${name}” is not a name this editor knows`);
     }
@@ -263,7 +255,7 @@ function compile(tokens, mode) {
       const inner = expr(depth + 1);
       if (!eat('|')) fail('a bar is not closed');
       openBars--;
-      return call('abs', inner);
+      return grow(bars(inner));
     }
     fail(`“${t.v}” is out of place`);
   }
@@ -273,15 +265,165 @@ function compile(tokens, mode) {
   return out;
 }
 
+// ---------- The tree as GLSL ----------
+
+// A branch of plain numbers folds to one number here rather than on every
+// pixel of every step, and a whole-number exponent squares and multiplies
+// instead of going through exp and log.
+
+function addCode(a, b, op) {
+  if (a.num !== null && b.num !== null) return real(op === '+' ? a.num + b.num : a.num - b.num);
+  return complex(`(${a.code} ${op} ${b.code})`);
+}
+
+function mulCode(a, b) {
+  if (a.num !== null && b.num !== null) return real(a.num * b.num);
+  if (a.num !== null) return complex(`(${glslFloat(a.num)} * ${b.code})`);
+  if (b.num !== null) return complex(`(${a.code} * ${glslFloat(b.num)})`);
+  return complex(`cmul(${a.code}, ${b.code})`);
+}
+
+function divCode(a, b) {
+  if (b.num !== null) {
+    if (b.num === 0) fail('division by zero');
+    return a.num !== null ? real(a.num / b.num) : complex(`(${a.code} / ${glslFloat(b.num)})`);
+  }
+  return complex(`cdiv(${a.code}, ${b.code})`);
+}
+
+function powCode(a, b) {
+  if (b.num !== null && Number.isInteger(b.num) && Math.abs(b.num) <= 64) {
+    if (b.num === 1) return a;
+    if (b.num === 2) return complex(`csq(${a.code})`);
+    return complex(`cpowi(${a.code}, ${b.num})`);
+  }
+  return complex(`cpow(${a.code}, ${b.code})`);
+}
+
+function emit(node, mode) {
+  switch (node.k) {
+    case 'num': return real(node.v);
+    case 'const': return CONSTS[node.name]();
+    case 'var': return complex(mode.vars[node.name]);
+    case 'call': return complex(`${FUNCS[node.fn]}(${emit(node.arg, mode).code})`);
+    case 'neg': {
+      const a = emit(node.a, mode);
+      return a.num !== null ? real(-a.num) : complex(`(-${a.code})`);
+    }
+    case 'add': return addCode(emit(node.a, mode), emit(node.b, mode), node.op);
+    case 'mul': return mulCode(emit(node.a, mode), emit(node.b, mode));
+    case 'div': return divCode(emit(node.a, mode), emit(node.b, mode));
+    default: return powCode(emit(node.a, mode), emit(node.b, mode));
+  }
+}
+
 function parse(src, mode) {
   if (String(src).trim().length > MAX_LENGTH) fail('that formula is too long');
   const rhs = rightHandSide(normalize(src));
   if (rhs.includes('_')) fail('only zₙ and zₙ₊₁ are understood, not earlier terms like zₙ₋₁');
-  return { glsl: compile(lex(rhs), mode).code, text: rhs };
+  const tree = build(lex(rhs), mode);
+  return { glsl: emit(tree, mode).code, text: rhs, tree };
 }
 
 export const parseFormula = (src, extras = []) => parse(src, iteration(extras));
 export const parseSeed = (src, extras = []) => parse(src, seed(extras));
+
+// ---------- The tree as a line to type ----------
+
+// What invent.js hands back to the field. A bracket goes in where precedence
+// needs one and nowhere else, and a product written side by side keeps that
+// form unless the halves would run together into one name or one number.
+//
+// A bar only opens where a value is due, so inside one the rules tighten. A
+// bracket puts the count back to nothing, which is why the text inside one is
+// spelt as if no bar were open.
+
+const ATOM = 5;
+const POW = 4;
+const UNARY = 3;
+const MUL = 2;
+const ADD = 1;
+
+const BINDS = {
+  num: ATOM, const: ATOM, var: ATOM, call: ATOM, pow: POW, neg: UNARY, mul: MUL, div: MUL, add: ADD,
+};
+
+const DIGIT_EDGE = /[0-9.]/;
+const LETTER_EDGE = /[a-z]/;
+
+// Two halves stand side by side as a product only where the join still reads
+// as two things. Digit against digit makes one longer number and letter
+// against letter one longer name; a sign at the front of the right half reads
+// as the operator it looks like; and a bar, inside a bar, closes the one
+// already open rather than opening its own.
+function joinable(left, right, inBar) {
+  if (/^[-+]/.test(right)) return false;
+  if (inBar && right.startsWith('|')) return false;
+  const ends = left[left.length - 1];
+  const starts = right[0];
+  return !((DIGIT_EDGE.test(ends) && DIGIT_EDGE.test(starts))
+    || (LETTER_EDGE.test(ends) && LETTER_EDGE.test(starts)));
+}
+
+function spell(node, inBar) {
+  switch (node.k) {
+    case 'num': return String(node.v);
+    case 'const': case 'var': return node.name;
+    case 'call': return node.bars
+      ? `|${write(node.arg, ADD, true)}|`
+      : `${node.fn}(${write(node.arg, ADD, false)})`;
+    case 'neg': return `-${write(node.a, UNARY, inBar)}`;
+    case 'add': return addText(node, inBar);
+    case 'mul': {
+      const left = write(node.a, MUL, inBar);
+      const right = write(node.b, UNARY, inBar);
+      return node.tight && joinable(left, right, inBar) ? `${left}${right}` : `${left}*${right}`;
+    }
+    case 'div': return `${write(node.a, MUL, inBar)}/${write(node.b, UNARY, inBar)}`;
+    default: return `${write(node.a, ATOM, inBar)}^${exponentText(node.b, inBar)}`;
+  }
+}
+
+// A term that is itself negative reads as a subtraction rather than as a plus
+// in front of a minus, so a tweak that turns 0.5 into -0.5 comes back as a
+// line someone would have written. A minus at the front of a term carries
+// over the whole of it, which is what lets the sign move to the operator.
+// Terms added to a sum run on without brackets, since where they are added
+// makes no difference; terms taken off one need them, since it does.
+function addText(node, inBar) {
+  const left = write(node.a, ADD, inBar);
+  const right = write(node.b, node.op === '+' ? ADD : MUL, inBar);
+  return right.startsWith('-')
+    ? `${left} ${node.op === '+' ? '-' : '+'} ${right.slice(1)}`
+    : `${left} ${node.op} ${right}`;
+}
+
+// A negative exponent is bracketed though it need not be: z^(-2) is what the
+// power is, and z^-2 reads like a subtraction that lost its left side.
+function exponentText(node, inBar) {
+  const it = bare(node);
+  return it.k === 'num' && it.v < 0 ? `(${it.v})` : write(it, POW, inBar);
+}
+
+// Nobody writes a coefficient of one, a coefficient of minus one is a sign,
+// and a minus in front of a minus is neither. A tweak lands on these often
+// enough that the line would fill up with them. The brackets are worked out
+// after they go, so what is left keeps only the brackets it needs.
+function bare(node) {
+  if (node.k === 'neg' && node.a.k === 'neg') return bare(node.a.a);
+  if (node.k === 'neg' && node.a.k === 'num') return numeral(-node.a.v);
+  if (node.k !== 'mul' || node.a.k !== 'num' || Math.abs(node.a.v) !== 1) return node;
+  return node.a.v === 1 ? bare(node.b) : negate(bare(node.b));
+}
+
+function write(node, binds, inBar) {
+  const it = bare(node);
+  const bracketed = BINDS[it.k] < binds;
+  const text = spell(it, bracketed ? false : inBar);
+  return bracketed ? `(${text})` : text;
+}
+
+export const printFormula = (node) => spell(bare(node), false);
 
 // ---------- The same line, coloured ----------
 
