@@ -2,12 +2,12 @@
 
 **[Live demo](https://fractal-explorer-six.vercel.app/app/)**
 
-A web port of a PenguinMod project (`FractalExplorer.pmp`). Nine escape-time
-sets drawn on the GPU with WebGL2 fragment shaders, plus any number built from
-a formula you type and save to the menu. Cards drag into any order you like,
-and into folders you name. Eight of them zoom without a precision limit; Pacman stops at
-2^40. The original's camera model, pen colours, and controls carry over; the
-CPU pen-plotting does not.
+A web port of a PenguinMod project (`FractalExplorer.pmp`). A list of
+escape-time sets drawn on the GPU with WebGL2 fragment shaders, plus any number
+built from a formula you type and save to the menu. Cards drag into any order
+you like, and into folders you name. They zoom without a precision limit,
+except Pacman, which stops at 2^40. The original's camera model, pen colours,
+and controls carry over; the CPU pen-plotting does not.
 
 Try [10^301 zoom](https://fractal-explorer-six.vercel.app/app/#mandelbrot@0,1,2^1000.000)
 to see the arbitrary-precision path working: a 1128-bit reference orbit, drawn
@@ -553,7 +553,7 @@ same `#saved2@` link and the same place in the menu. On a built-in set it is a
 line to start from rather than a change to the set itself. Mandelbrot stays
 Mandelbrot, and Save adds what you made beside it.
 
-Seven of the nine built-in sets are written out for the editor. Mandelbrot is
+Most built-in sets are written out for the editor. Mandelbrot is
 `z^2 + c`. Julia is the same line with `z₀ = x+yi` and `c` held at
 `-0.74543+0.11301i`. Burning Ship is `(|re(z)| + i|im(z)|)^2 + conj(c)`,
 Perpendicular Ship is `(re(z) - i|im(z)|)^2 + c`, MandelBug is
