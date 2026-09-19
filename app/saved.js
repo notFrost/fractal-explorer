@@ -7,9 +7,12 @@ const STORE = 'saved-fractals';
 const readableVar = (v) => v && typeof v === 'object'
   && typeof v.name === 'string' && typeof v.seed === 'string';
 
+const readableList = (list, item) => list === undefined || (Array.isArray(list) && list.every(item));
+
 const readable = (f) => f && typeof f === 'object'
   && typeof f.id === 'string' && typeof f.name === 'string' && typeof f.formula === 'string'
-  && (f.vars === undefined || (Array.isArray(f.vars) && f.vars.every(readableVar)));
+  && readableList(f.vars, readableVar)
+  && readableList(f.earlier, (t) => typeof t === 'string');
 
 export function readSaved() {
   try {

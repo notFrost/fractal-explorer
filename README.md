@@ -488,6 +488,28 @@ The usual pair, `z₀ = 0` and `c = x+yi`, is the Mandelbrot arrangement. Fix `c
 at a constant and start `z` at the pixel instead, `z₀ = x+yi`, and it draws the
 Julia set of that constant.
 
+### Earlier terms
+
+A formula may read the step before the one it is writing, and the steps behind
+that, as `zₙ₋₁`, `zₙ₋₂` and so on, up to eight back. The subscripts on the
+cards work as typed, and so does `Z_(n-1)`. `zₙ` and `zₙ₊₁` are the step the
+line already writes, so the parser drops those two and reads the rest.
+
+A step back has to start somewhere, and the line does not say where: `zₙ₊₁ =
+zₙ² + zₙ₋₁` is a different fractal for `z₋₁ = 0` than for `z₋₁ = 0.1i`. So a
+`z₋₁` field appears beside `z₀` the moment the formula reaches for it, one per
+step, and the orbit begins with those values in hand. They are written the way
+`z₀` and `c` are, and one left empty is refused rather than started at zero.
+Stop reaching that far back and the field goes, holding what it had in case
+the term comes back. An index the iteration cannot keep — `zₙ₋₉`, or `zₙ₋₁` in
+a starting value, which would have nothing to name — turns red as you type it.
+
+That is Webb, which used to be one of the two sets the editor could not write:
+`Z_(n+1) = Z_(n)^2 + Z_(n-1)` with `z₀ = x+yi` and `z₋₁ = 0`. The shader keeps
+one variable per step and shifts them each iteration, oldest first, after the
+next `z` is worked out and before any of them moves. A formula with no index
+compiles exactly as it did before, to a single `z = …`.
+
 **+ Variable**, under the pair, adds a value of your own: a letter and a
 starting value the orbit keeps for the whole run, exactly as `c` does. It is
 written the way `z₀` and `c` are, so it takes `x` and `y` as well as numbers;
@@ -558,8 +580,8 @@ local storage, so it survives a reload but does not travel with a link, and a
 `#saved2@` link only opens for the browser that saved it.
 
 **Edit**, beside the grip on every card, opens that set in the editor with its
-formula, its two starting values and any variables it carries already in the
-fields. A built-in set brings no variables, so the rows start empty. On a
+formula, its starting values and any variables it carries already in the
+fields. A built-in set brings no variables, so those rows start empty. On a
 fractal you saved, Save replaces it where it stands, under the same id, the
 same `#saved2@` link and the same place in the menu. On a built-in set it is a
 line to start from rather than a change to the set itself. Mandelbrot stays
@@ -570,14 +592,14 @@ Most built-in sets are written out for the editor. Mandelbrot is
 `-0.74543+0.11301i`. Burning Ship is `(|re(z)| + i|im(z)|)^2 + conj(c)`,
 Perpendicular Ship is `(re(z) - i|im(z)|)^2 + c`, MandelBug is
 `re(z^2) + 2i(re(z) + im(z)) + c`, Pacman is
-`re(z)^2 - im(z^2+c)^2 + re(c) + i*im(z^2+c)`, and The Octopus is
-`(re(z) + im(c) + i(|im(z)| - re(c)))^2 + c`. Any copy iterates in float32
-like a typed formula, so it stops at 10⁶ zoom where the original hands over to
-a reference orbit.
+`re(z)^2 - im(z^2+c)^2 + re(c) + i*im(z^2+c)`, The Octopus is
+`(re(z) + im(c) + i(|im(z)| - re(c)))^2 + c`, and Webb is
+`Z_(n+1) = Z_(n)^2 + Z_(n-1)` with `z₀ = x+yi` and `z₋₁ = 0`. Any copy
+iterates in float32 like a typed formula, so it stops at 10⁶ zoom where the
+original hands over to a reference orbit.
 
-Collatz and Webb are greyed out, and the button says why. Collatz picks one of
-two formulas each step, and Webb needs the term before last. Neither is one
-formula in `z` and `c`.
+Collatz alone is greyed out, and the button says why: it picks one of two
+formulas each step, and the editor writes one.
 
 The × in the top right of a saved card removes it. It puts the question over
 the card first, and Cancel or Esc backs out. Delete drops the card, its shader and
@@ -585,7 +607,8 @@ its stored entry. Ids count up rather than filling the gap a deletion leaves,
 so an old `#saved1@` link falls back to the menu instead of opening a
 different fractal.
 
-What it reads: `z`, `c`, `x`, `y` and any variable you have added, decimal
+What it reads: `z`, `c`, `x`, `y`, `zₙ₋₁` and the steps behind it, and any
+variable you have added, decimal
 numbers, `i`, `pi` and `e`; `+ - * / ^` with brackets, two values side by
 side for multiplication, letters written together as well, so `x+yi` reads
 as `x + y·i`; `abs re im conj exp log sqrt sin cos tan sinh cosh tanh`, each of
@@ -605,9 +628,9 @@ The editor colours each line as you type. Brackets and bars take a colour from
 their nesting depth and the six colours cycle, so a pair matches and the pairs
 either side of it do not. `z`, `c`, `x`, `y` and the letters you have added,
 numbers, `i pi e`, the function names and the operators each have a colour of
-their own. The index on `zₙ₊₁` is dim, since the parser drops it, and a bracket
-or bar left open turns red, as does a name that belongs to a different field,
-such as `z` in a starting value. A layer
+their own. An index is dim, whether the parser drops it as it does `zₙ₊₁` or
+reads it as it does `zₙ₋₁`, and a bracket or bar left open turns red, as does
+a name that belongs to a different field, such as `z` in a starting value. A layer
 behind each field carries the colours; the field itself keeps the caret, the
 selection and the scrolling.
 The help line under a field prints each group in its colour, so it doubles as
@@ -620,8 +643,9 @@ over to a reference orbit. A formula can also overshoot the
 bailout or reach NaN, neither of which the smooth count survives, so a count
 it cannot read falls back to the step number. The text rides in the URL as
 `?f=` before the hash, with `?z=` and `?c=` for the starting values when they
-are not the usual pair and a `?v=k:0.5` for each variable added, so a custom
-view shares like any other.
+are not the usual pair, an `?e=` for each step the formula reaches back, in
+order from `z₋₁`, and a `?v=k:0.5` for each variable added, so a custom view
+shares like any other.
 
 ## Ported from the original
 
