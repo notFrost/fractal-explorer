@@ -4,10 +4,11 @@ import { Renderer } from './gpu.js';
 import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palettes.js';
 import {
   parseFormula, parseSeed, formulaTokens, seedTokens, varGlsl, freeVarName, varNameError,
-  earlierTerms, earlierLabel,
+  earlierTerms, earlierLabel, printFormula,
 } from './formula.js';
 import { partsKey } from './shaders/custom.js';
-import { frameCustom } from './framing.js';
+import { frameCustom, sizeUp } from './framing.js';
+import { inventFormula, tweakFormula } from './invent.js';
 import { pickSpot } from './dive.js';
 import { drawPlane } from './plane.js';
 import { readSaved, writeSaved, freeId, registerSet, unregisterSet } from './saved.js';
@@ -108,6 +109,8 @@ const editor = {
   cSeed: $('#seed-c').closest('.editor-seed'),
   addVar: $('#add-var'),
   known: $('#formula-vars'),
+  invent: $('#invent'),
+  tweak: $('#tweak'),
 };
 const preview = {
   box: $('#preview'),
@@ -1119,7 +1122,9 @@ function drawPreview(parts, home) {
   c.getContext('2d').drawImage(canvas, 0, 0);
 }
 
-function updatePreview() {
+// `framed` is the view a draw was already measured in, so a press that just
+// surveyed several formulas does not survey the winner over again.
+function updatePreview(framed = null) {
   if (!renderer || mode !== 'editor') return;
   let parsed;
   try {
@@ -1132,7 +1137,7 @@ function updatePreview() {
   const key = `${partsKey(parts)}|${state.palette}`;
   if (key !== previewKey) {
     try {
-      drawPreview(parts, customHome(parsed, parts));
+      drawPreview(parts, framed ?? customHome(parsed, parts));
     } catch {
       preview.box.classList.add('stale');
       return;
@@ -1145,8 +1150,77 @@ function updatePreview() {
 
 function schedulePreview() {
   clearTimeout(previewTimer);
-  previewTimer = setTimeout(updatePreview, PREVIEW_DELAY);
+  previewTimer = setTimeout(() => updatePreview(), PREVIEW_DELAY);
 }
+
+// ---------- Inventing a formula, and moving one along ----------
+
+// A formula drawn at random is as likely to escape everywhere or nowhere as
+// it is to draw anything, and so is a formula a tweak has just moved. So the
+// press draws several and keeps whichever one framing.js found the most
+// fractal in. Each draw is a survey and a read of the view it settles on,
+// about 85 ms, which is what holds the count this low.
+const INVENT_DRAWS = 4;
+const TWEAK_DRAWS = 3;
+
+const NOTHING_DREW = 'none of those drew anything';
+
+// A line that reaches further back than the last one asks for a starting
+// value the editor has no row for yet, so the draw carries one. Values
+// already in the rows stay, including the ones a shorter line stops asking
+// for, which are the ones the rows come back with.
+function earlierFor(base, formula) {
+  const given = [...base.earlier];
+  while (given.length < earlierTerms(formula)) given.push(EARLIER_SEED);
+  return given;
+}
+
+function bestDraw(draws, base, nextLine) {
+  let best = null;
+  let framed = null;
+  let mark = -1;
+  let trouble = null;
+  for (let draw = 0; draw < draws; draw++) {
+    const formula = nextLine();
+    if (!formula) continue;
+    const texts = { ...base, formula, earlier: earlierFor(base, formula) };
+    let parsed;
+    try {
+      parsed = parseCustom(texts);
+    } catch (err) {
+      trouble = err.message;
+      continue;
+    }
+    const { home, score } = sizeUp(renderer, shaderParts(parsed), usualHome(parsed));
+    if (score > mark) {
+      best = texts;
+      framed = home;
+      mark = score;
+    }
+  }
+  return { texts: best, framed, trouble };
+}
+
+// The line changes and the starting values, the variables and the name stay
+// as they are, so an invented formula lands in the arrangement already set
+// up.
+function drawFormula(draws, nextLine) {
+  const { texts, framed, trouble } = bestDraw(draws, editorTexts(), nextLine);
+  if (!texts) return trouble ?? NOTHING_DREW;
+  for (const f of FIELDS) editor.input[f.key].value = texts[f.key];
+  openEarlierRows(texts.earlier);
+  editorChanged();
+  clearTimeout(previewTimer);
+  updatePreview(framed);
+  return null;
+}
+
+const inventedLine = () => printFormula(inventFormula());
+
+const tweakedLine = (tree) => {
+  const next = tweakFormula(tree);
+  return next && printFormula(next);
+};
 
 function leaveEditor() {
   renderer?.setCustom('custom', committed?.parts ?? null);
@@ -1200,6 +1274,23 @@ for (const f of FIELDS) {
   input.addEventListener('input', editorChanged);
   input.addEventListener('scroll', () => { editor.ink[f.key].scrollLeft = input.scrollLeft; });
 }
+
+editor.invent.addEventListener('click', () => {
+  const err = drawFormula(INVENT_DRAWS, inventedLine);
+  if (err) editor.error.textContent = err;
+});
+
+editor.tweak.addEventListener('click', () => {
+  let parsed;
+  try {
+    parsed = parseCustom(editorTexts());
+  } catch (err) {
+    editor.error.textContent = err.message;
+    return;
+  }
+  const err = drawFormula(TWEAK_DRAWS, () => tweakedLine(parsed.formula.tree));
+  if (err) editor.error.textContent = err;
+});
 
 function editFractal(set) {
   openedFrom = set;
@@ -1356,6 +1447,22 @@ $('#editor-cancel').addEventListener('click', leaveEditor);
 $('#create').addEventListener('click', () => {
   openedFrom = null;
   opensWith = null;
+  editor.name.value = '';
+  showEditor();
+});
+
+// Inventing from the menu starts from the usual arrangement rather than from
+// whatever the editor was last left holding, so the draw is judged on a
+// parameter plane and the formula is the only thing that was made up.
+$('#invent-fractal').addEventListener('click', () => {
+  const base = { ...DEFAULTS, earlier: [], vars: [] };
+  const { texts } = bestDraw(INVENT_DRAWS, base, inventedLine);
+  if (!texts) {
+    $('#menu-note').textContent = NOTHING_DREW;
+    return;
+  }
+  openedFrom = null;
+  opensWith = texts;
   editor.name.value = '';
   showEditor();
 });

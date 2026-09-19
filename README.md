@@ -542,6 +542,82 @@ read leaves the last picture up, dimmed, rather than blanking mid-keystroke. A
 formula previewed and then cancelled is dropped, and the shader goes back to
 the last one rendered.
 
+### Invent and Tweak
+
+Two buttons sit at the end of the Formula row, for when the line is the part
+you do not have.
+
+**Invent** writes one from nothing. What it draws is a tree of the kind the
+parser builds, printed back out as a line, so what lands in the field always
+reads. Assembling the text at random instead would mostly produce text that
+does not parse, and the rest would not mean much either.
+
+The grammar it draws from is weighted towards the shapes escape-time fractals
+take. Most draws are a power of `z`, twisted or not, plus a parameter. The
+twist is nothing, or `conj`, or the Burning Ship's `|Re z| + i|Im z|`, or the
+Perpendicular Ship's `Re z − i|Im z|`, or `|z|`, and it goes inside the power
+or around it, which is the difference between Burning Ship and Celtic. The
+exponent runs from 2 to 8, weighted low. Less often the draw is two powers of
+`z` rather than one, a quotient with a pole in it such as `z² + c/(z² − 0.5)`,
+one of `sin cos sinh cosh tan exp` around `z`, or a step the orbit already
+took, `zₙ₋₁` or `zₙ₋₂`, carried alongside the power the way Webb carries it.
+The parameter is usually `c`, and sometimes `conj(c)`, `−c`, `ic`, `0.5c` or
+`c²`.
+
+Two of those shapes are drawn around where `z₀ = 0` would kill them. A
+divisor is always held off zero, since a plain `c/z²` divides by nothing on
+the first step and takes the whole picture with it, and a wave multiplied by
+the parameter is drawn from `cos cosh exp` alone, since `c·sin(z)` starting
+at zero stays at zero for ever. Both read as fractals under a Julia
+arrangement and as one flat colour under the usual pair, which is the
+arrangement Invent is judged in.
+
+**Tweak** moves the line already in the field one step. It reads the line
+into the same tree, changes one node, and now and then a second, then prints
+it back. A step is an exponent up or down or somewhere else, a bar put around
+a term or taken off one, a `conj` added or removed, a term added or dropped,
+a `+` turned into a `−`, a function swapped for one of its family (`sin` for
+`cos`, `re` for `im`, `exp` for `log`), a number doubled, halved or negated, a
+coefficient put in front of a term, a `z` and a `c` exchanged, or an earlier
+step moved one further back or one nearer. A step that leaves the orbit with
+no `z` in it at all has nothing to iterate, and one that drops the last `c`
+leaves every pixel with the same orbit, so both are drawn again rather than
+shown, as is a step that lands back on the line it started from. Each press
+reads what is in the field, so the second press works on what the first one
+left.
+
+Neither button touches `z₀`, `c`, the variables or the name. The line changes
+and the arrangement around it stays, so a Tweak on a Julia arrangement stays
+a Julia set. A line that reaches further back than the last one does bring a
+`z₋₁` field with it, starting at 0, since the formula cannot be drawn without
+one; a line that stops reaching leaves the field holding what it had, as a
+typed line does. **Invent Fractal**, beside Create Fractal on the menu, is
+the one exception to the rest. It opens the editor on an invented line with
+the usual pair, `z₀ = 0` and `c = x+yi`, so the formula is the only thing made
+up.
+
+A formula drawn at random is as likely to escape everywhere or nowhere as it
+is to draw anything, so a press does not take the first line it draws. It
+draws four, or three for a Tweak, and keeps whichever has the most fractal in
+it. Each draw is surveyed the way a typed line is, and the mark is read off a
+depth map of the view the survey settled on. Reading it at the view the
+survey opens from would cost four passes fewer and throw away every line
+whose set is small: `z² + zₙ₋₁ + c` sits at 677×, and eight units wide it is
+a pixel of nothing. A picture that is all interior with its edge off the
+frame scores zero, and among the rest the mark is how hard the escape count
+works from one pixel to the next. A disc of one colour with a wash behind it
+scores near zero; the filaments along a boundary score. A draw costs about 85
+milliseconds, which is what holds the count at four, and the winner keeps the
+view it was measured in, so the preview does not survey it again.
+
+Because a tweak goes through the tree and back out, the line returns in the
+editor's own notation rather than the one it went in as, so `Z_(n+1) =
+Z_(n)^2 + C` tweaked comes back as `z^2 + c` with the change in it. The
+printer keeps a bracket only where precedence needs one, drops a coefficient
+of 1, moves a minus at the front of a term onto the operator before it, and
+leaves a product written side by side that way where the two halves cannot
+run together into one name or one number.
+
 ### Finding the fractal
 
 Where a typed formula's set sits is not something the text says. `z² + c` is
@@ -591,7 +667,8 @@ local storage, so it survives a reload but does not travel with a link, and a
 
 **Edit**, beside the grip on every card, opens that set in the editor with its
 formula, its starting values and any variables it carries already in the
-fields. A built-in set brings no variables, so those rows start empty. On a
+fields, which is also how a built-in set reaches **Tweak**. A built-in set
+brings no variables, so those rows start empty. On a
 fractal you saved, Save replaces it where it stands, under the same id, the
 same `#saved2@` link and the same place in the menu. On a built-in set it is a
 line to start from rather than a change to the set itself. Mandelbrot stays

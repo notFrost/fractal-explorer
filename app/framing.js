@@ -1,5 +1,6 @@
 // Where a typed formula's fractal sits, so the editor's preview and the view
-// Render opens on frame it instead of assuming the origin.
+// Render opens on frame it instead of assuming the origin. For a formula
+// nobody typed, it also says whether there is a fractal there to frame.
 //
 // A formula gives no closed form for its set's extent, so the survey measures
 // it. It draws a small greyscale map of how long each pixel's orbit lasts,
@@ -122,5 +123,53 @@ export function frameCustom(renderer, parts, fallback) {
     return survey(renderer, parts, fallback);
   } catch {
     return fallback;
+  }
+}
+
+// ---------- Is there a fractal here at all ----------
+
+// The generator and the tweaker put several formulas up against each other
+// and keep the best, and this is the mark each one gets. It is read at the
+// view the survey settled on rather than at the view it opened from: a set
+// that sits at 600× is a pixel of nothing in the opening view, and a mark
+// taken there would throw away every formula whose set is small.
+
+// Above this the picture is interior with its edge off the frame.
+const MOST_INSIDE = 0.9;
+
+const insideShare = (depth) => {
+  let held = 0;
+  for (let i = 0; i < WIDE * HIGH; i++) if (depth[i * 4] === 255) held++;
+  return held / (WIDE * HIGH);
+};
+
+// How hard the escape count works across the picture. A disc of one colour
+// and a smooth wash behind it score near nothing; the filaments along a
+// boundary swing the count from one pixel to the next, and a set with more
+// boundary in view scores over a set with less.
+function detail(depth) {
+  let total = 0;
+  for (let row = 1; row < HIGH - 1; row++) {
+    for (let col = 1; col < WIDE - 1; col++) {
+      const at = (row * WIDE + col) * 4;
+      total += Math.abs(depth[at + 4] - depth[at - 4])
+        + Math.abs(depth[at + WIDE * 4] - depth[at - WIDE * 4]);
+    }
+  }
+  return total / ((WIDE - 2) * (HIGH - 2));
+}
+
+// Where the formula's fractal is and how much of one it is, in one go, since
+// the second answer is read off the first. Zero for a formula with nothing to
+// see, and for one the GPU would not draw.
+export function sizeUp(renderer, parts, fallback) {
+  try {
+    const home = survey(renderer, parts, fallback);
+    const cam = surveyCamera(home.x, home.y, home.zoom);
+    const depth = renderer.depthMap(parts, cam, WIDE, HIGH, iterationsFor(cam.lz, 1, 'custom'));
+    if (!depth) return { home, score: 0 };
+    return { home, score: insideShare(depth) > MOST_INSIDE ? 0 : detail(depth) };
+  } catch {
+    return { home: fallback, score: 0 };
   }
 }
