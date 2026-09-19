@@ -1,7 +1,7 @@
 import { MAX_ITER, STAGE_HEIGHT, FLOAT_LOG_ZOOM, BIG_LOG_ZOOM, FE_LOG_ZOOM } from './fractals.js';
 import { bitsFor, ORBITS } from './precision.js';
 import { VERT, COMMON, BLIT } from './shaders/common.js';
-import { customBody, depthBody } from './shaders/custom.js';
+import { customBody, depthBody, partsKey } from './shaders/custom.js';
 import { SOURCES, SHADERS, COST } from './shaders/registry.js';
 
 const UNIFORMS = ['u_res', 'u_px', 'u_center', 'u_offset', 'u_rot', 'u_pxm', 'u_pxe', 'u_maxIter', 'u_refLen', 'u_ref2', 'u_julia', 'u_ref', 'u_palette'];
@@ -41,7 +41,7 @@ const REPROJECT_STAGE = 2 * STAGE_HEIGHT;
 
 const juliaKey = (view) => (view.julia ? `${view.julia.re},${view.julia.im}` : '');
 
-const customKey = (parts) => (parts ? [parts.iter, ...parts.seeds.map((s) => `${s.name}=${s.glsl}`)].join('|') : null);
+const customKey = (parts) => (parts ? partsKey(parts) : null);
 
 function compile(gl, type, src) {
   const s = gl.createShader(type);
