@@ -3,8 +3,9 @@ float escape(vec2 dc) {
   vec2 d = vec2(0.0);
   int m = 0;
   int last = u_refLen - 1;
+  vec2 Z0 = refAt(0).xy;
+  vec2 Z = Z0;
   for (int n = 0; n < u_maxIter; n++) {
-    vec2 Z = refAt(m).xy;
     m++;
     vec2 Zn = refAt(min(m, last)).xy;
     float di = 2.0 * (Z.x * d.y + Z.y * d.x + d.x * d.y) + dc.y;
@@ -13,7 +14,7 @@ float escape(vec2 dc) {
     vec2 z = Zn + d;
     float zz = dot(z, z);
     if (zz > 1e4) return smoothT(n + 1, log(zz));
-    if (zz < dot(d, d) || m >= last) { d = z; m = 0; }
+    if (zz < dot(d, d) || m >= last) { d = z; m = 0; Z = Z0; } else { Z = Zn; }
   }
   return 0.0;
 }
