@@ -1,5 +1,11 @@
 /* Viewer: the canvas and the chrome around it. The HUD is in hud.css. */
 
+:root {
+  /* One control button across. The key list clears the control bar by this,
+     so the two cannot drift apart. */
+  --cbtn: 3rem;
+}
+
 body.viewing { overflow: hidden; }
 
 .viewer {
@@ -81,30 +87,47 @@ body.viewing { overflow: hidden; }
 
 .portal-link:hover { border-color: var(--dim); color: var(--ink); }
 
+/* The key list. It stands above the control bar and grows upward as it wraps,
+   so a long list never reaches down across the buttons. Sideways it takes what
+   the HUD leaves, down to the width of its longest key, and each key stays
+   whole on its line because the item, not the line, is what wraps. On the last
+   thin sliver where the two would still meet, this one is on top and readable
+   rather than lost behind the panel. */
 .help {
   position: absolute;
-  right: 0.75rem;
-  bottom: max(0.75rem, env(safe-area-inset-bottom));
+  z-index: 1;
+  right: max(0.75rem, env(safe-area-inset-right));
+  bottom: calc(max(0.75rem, env(safe-area-inset-bottom)) + var(--cbtn) + 0.5rem);
+  max-width: min(44ch, max(34ch, calc(100vw - var(--hud-w) - 2.25rem)));
   margin: 0;
+  padding: 0.5rem 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.25rem 1rem;
   color: var(--dim);
   text-align: right;
   pointer-events: none;
 }
 
-/* Control bar: the plane, a dive, the timeline and a screenshot. Same on
-   every device. */
+.help[hidden] { display: none; }
+
+.help span { white-space: nowrap; }
+
+/* Control bar: the plane, a dive, the timeline, the key list and a
+   screenshot. Same on every device. */
 
 .controls {
   position: absolute;
   right: max(0.75rem, env(safe-area-inset-right));
-  bottom: calc(max(0.75rem, env(safe-area-inset-bottom)) + 2rem);
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
   display: flex;
   gap: 0.5rem;
 }
 
 .cbtn {
-  width: 3rem;
-  height: 3rem;
+  width: var(--cbtn);
+  height: var(--cbtn);
   display: grid;
   place-items: center;
   font-size: 1.1rem;
@@ -124,14 +147,15 @@ body.viewing { overflow: hidden; }
 .cbtn:hover { border-color: var(--ink); }
 .cbtn:active, .cbtn-accent:hover { background: var(--magenta); border-color: var(--magenta); color: #000; }
 
+/* No keyboard, no key list, and no button to call it back. */
 @media (pointer: coarse) {
-  .help { display: none; }
-  .controls { bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+  .help, #help-toggle { display: none; }
 }
 
 /* Narrow screens: the HUD owns the bottom, so the controls join the top bar. */
 @media (max-width: 720px) {
-  .help { display: none; }
+  :root { --cbtn: 2.5rem; }
+  .help, #help-toggle { display: none; }
   /* The buttons in a row would run across the set name, so they go two to a
      row and take the free canvas under the top bar instead. */
   .controls {
@@ -139,14 +163,14 @@ body.viewing { overflow: hidden; }
     bottom: auto;
     flex-wrap: wrap;
     justify-content: flex-end;
-    width: calc(2 * 2.5rem + 0.5rem);
+    width: calc(2 * var(--cbtn) + 0.5rem);
   }
   /* Up here the controls share the top-right corner with the portal link, so
      they sit one button width plus a gap to its left. */
   body.viewing .controls {
     right: calc(max(0.75rem, env(safe-area-inset-right)) + 5.5rem + 0.5rem);
   }
-  .cbtn { width: 2.5rem; height: 2.5rem; font-size: 1rem; }
+  .cbtn { font-size: 1rem; }
   .cbtn svg { width: 18px; height: 18px; }
   .set-name { font-size: 1rem; }
 }

@@ -55,6 +55,7 @@ root, so the portal reads the hash on load and forwards anything shaped like
 | Open the animation timeline | V | the clapper button |
 | Take a keyframe where the view stands | K | + Keyframe on the timeline |
 | Fold the HUD away | H | the `hud` toggle under the panel |
+| Show or hide the key list | ? | the question-mark button |
 | Move a card or folder on the menu | arrow keys, with its grip focused | drag the grip |
 
 The `iter` slider sets how many iterations a pixel gets, logarithmically, so

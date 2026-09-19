@@ -1,6 +1,10 @@
 /* HUD: coordinates, zoom, colourway, bookmarks, and the go-to and Julia
    forms. The panel surface, chips and inputs come from design/chrome.css. */
 
+/* How wide the panel may grow. The key list in the opposite corner reads this
+   to work out what room is left, so it lives on :root rather than in here. */
+:root { --hud-w: 52ch; }
+
 .hud {
   position: absolute;
   z-index: 1;
@@ -9,7 +13,7 @@
   padding: 0.6rem 0.8rem;
   display: grid;
   gap: 0.15rem;
-  max-width: min(calc(100vw - 1.5rem), 52ch);
+  max-width: min(calc(100vw - 1.5rem), var(--hud-w));
 }
 
 .hud-body {
