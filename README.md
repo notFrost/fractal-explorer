@@ -312,6 +312,16 @@ Ultra Fractal renders. Abyss, Ember and Ultraviolet are five-stop gradients,
 the first two folded so they cycle without a seam. Ink and Chalk have no hue:
 contour bands every eight iterations, dark on paper or pale on slate.
 
+Where the escape count climbs by more than a cycle inside a single pixel, no
+colourway can land on it and a point sample there is one colour of the cycle
+picked at random. The period doubles until a cycle is about four pixels wide
+again, reading the two neighbouring doublings at once and crossfading between
+them so the step does not show, which bands detail the fixed period washes
+out. A cycle as long as the whole iteration budget bands the picture once and
+is as far as the doubling goes; past that the pixel takes the colourway's
+mean. Filament webs fine enough to be noise at pixel scale stay noisy, since
+the screen derivative the doubling reads is itself noise there.
+
 **Timing** in the HUD sums `EXT_disjoint_timer_query_webgl2` queries across
 the strips of one frame. `ref` is the CPU time for the reference orbit when it
 had to be recomputed.
