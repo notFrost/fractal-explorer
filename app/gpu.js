@@ -8,10 +8,11 @@ const UNIFORMS = ['u_res', 'u_px', 'u_center', 'u_offset', 'u_rot', 'u_pxm', 'u_
 const BLIT_UNIFORMS = ['u_src', 'u_dst', 'u_org', 'u_mx', 'u_my'];
 const REF_W = 1024;
 
-// A pass costs its pixels times its iterations times the shader's weight.
-// STRIP_BUDGET is what one draw call may spend before it runs long enough to
-// trip the GPU watchdog.
-const STRIP_BUDGET = 2e9;
+// A pass costs its pixels times its iterations times the shader's weight, and
+// a strip is the share of that cost one draw call may spend. The GPU watchdog
+// sits around two seconds, so a strip sized from a rate overestimated thirty
+// times over still lands inside it.
+const STRIP_MS = 65;
 
 // The weights in COST are relative, so what a unit of them costs in
 // milliseconds belongs to the machine and to the shader: a perturbation pass
@@ -152,6 +153,10 @@ export class Renderer {
     return { name: big && view.cam.lz > FE_LOG_ZOOM ? shaders.fe : shaders.pert, iters, deep };
   }
 
+  rateFor(name) {
+    return this.rates.get(name) ?? SEED_RATE;
+  }
+
   // The fraction of the canvas a first pass draws at: the largest one that
   // still fits a frame at the rate this shader has been running. 1 when the
   // whole picture already fits, so a cheap view draws once at full size and
@@ -159,7 +164,7 @@ export class Renderer {
   coarseScale(view) {
     const { name, iters } = this.plan(view);
     const full = this.canvas.width * this.canvas.height * iters * COST[name];
-    const rate = this.rates.get(name) ?? SEED_RATE;
+    const rate = this.rateFor(name);
     const ms = (s) => (full * s * s) / rate;
     let s = 1;
     while (s > COARSE_FLOOR && ms(s) > FRAME_MS) s /= 2;
@@ -398,7 +403,7 @@ export class Renderer {
     const cost = w * h * iters * COST[name];
     this.passName = name;
     this.passCost = cost;
-    const strips = Math.max(1, Math.ceil(cost / STRIP_BUDGET));
+    const strips = Math.max(1, Math.ceil(cost / (this.rateFor(name) * STRIP_MS)));
     return { strips: Math.min(strips, h) };
   }
 

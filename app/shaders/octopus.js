@@ -29,15 +29,17 @@ float escape(vec2 dc) {
   vec2 d = vec2(0.0);
   int m = 0;
   int last = u_refLen - 1;
+  vec4 R0 = refAt(0);
+  vec4 R = R0;
   for (int n = 0; n < u_maxIter; n++) {
-    vec4 R = refAt(m);
     vec2 w = vec2(d.x + dc.y, diffabs(R.y, d.y) - dc.x);
     d = cmul(2.0 * R.zw + w, w) + dc;
     m++;
-    vec2 z = refAt(min(m, last)).xy + d;
+    vec4 Rn = refAt(min(m, last));
+    vec2 z = Rn.xy + d;
     float zz = dot(z, z);
     if (zz > 1e4) return smoothT(n + 1, log(zz));
-    if (zz < dot(d, d) || m >= last) { d = z; m = 0; }
+    if (zz < dot(d, d) || m >= last) { d = z; m = 0; R = R0; } else { R = Rn; }
   }
   return 0.0;
 }
@@ -64,18 +66,20 @@ float escape(FE dc) {
   FE dq = FE(vec2(dc.m.y, -dc.m.x), dc.e);
   int m = 0;
   int last = u_refLen - 1;
+  vec4 R0 = refAt(0);
+  vec4 R = R0;
   for (int n = 0; n < u_maxIter; n++) {
-    vec4 R = refAt(m);
     FE w = feAdd(FE(vec2(d.m.x, diffabsScaled(R.y, d.m.y, d.e)), d.e), dq);
     vec2 t = 2.0 * R.zw + feToFloat(w);
     d = feAdd(fe(cmul(t, w.m), w.e), dc);
     m++;
-    FE z = feAdd(fe(refAt(min(m, last)).xy, 0), d);
+    vec4 Rn = refAt(min(m, last));
+    FE z = feAdd(fe(Rn.xy, 0), d);
     if (z.e >= 6) {
       float zz = dot(z.m, z.m) * pow2(2 * min(z.e, 60));
       if (zz > 1e4) return smoothT(n + 1, log(zz));
     }
-    if (feLess(z, d) || m >= last) { d = z; m = 0; }
+    if (feLess(z, d) || m >= last) { d = z; m = 0; R = R0; } else { R = Rn; }
   }
   return 0.0;
 }

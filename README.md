@@ -11,7 +11,7 @@ and controls carry over; the CPU pen-plotting does not.
 
 Try [10^301 zoom](https://fractal-explorer-six.vercel.app/app/#mandelbrot@0,1,2^1000.000)
 to see the arbitrary-precision path working: a 1128-bit reference orbit, drawn
-in 77 strips.
+in as many strips as the card needs.
 
 Any view can be taken as a keyframe, and the timeline under the viewer renders
 the path between keyframes out to an MP4 or a GIF with every frame drawn whole.
@@ -138,7 +138,10 @@ Under `prefers-reduced-motion` the view arrives without the fall.
 One fullscreen triangle, one fragment shader per set. Cheap frames are a
 single draw call. Expensive frames are drawn in horizontal strips across
 successive animation frames so no draw call runs long enough to trip the GPU
-watchdog. Every input event starts a new frame and cancels the old one.
+watchdog. A strip is sized to 65 ms at the rate the timer extension has
+measured that shader running at, so the count follows the machine rather than
+the view: a card twice as fast draws the same frame in half the strips.
+Every input event starts a new frame and cancels the old one.
 
 Rotation happens where a pixel becomes a complex number. Each shader takes the
 pixel's offset from the centre of the screen, turns it onto the plane's axes,
@@ -158,6 +161,14 @@ offset (Zhuoran's method). The reference is cached and reused while the camera
 stays within two screens of it and the zoom stays within 2^64 of when it was
 computed, so panning at depth is free.
 
+A step reads the reference at `n` and again at `n + 1`, and the second read is
+the next step's first, so the shaders carry it in a register and fetch once per
+step. The rebase branch goes back to the reference's start, which is read once
+before the loop. On the float32 delta tier, where the loop is short enough for
+the fetch to weigh in it, that runs 1.2 to 1.35 times faster; on the floatexp
+tier, where each step is an order of magnitude more arithmetic, it makes no
+measurable difference.
+
 | Zoom | Reference orbit | Pixel delta |
 | --- | --- | --- |
 | below 2^40 (about 10^12) | double | float32 |
@@ -173,8 +184,8 @@ GLSL ES 3.00 lacks `frexp` and `ldexp`.
 There is no upper zoom limit in the code, bar Pacman's. In practice the cost
 grows with depth: the iteration budget is `30 × log2 zoom`, capped at 50 000
 and then scaled by the HUD slider, to 100 000 at the most, and the reference
-orbit costs about 90 ms at 10^300. At 10^300 a 1280×800 frame is roughly 80 strips and
-under a second on an RTX 2060.
+orbit costs about 90 ms at 10^300. At 10^300 a 1280×800 frame takes under a
+second on an RTX 2060.
 
 **Webb**, **Collatz**, **Julia**, **Burning Ship**, **Perpendicular Ship**,
 **MandelBug** and **The Octopus** iterate directly in float32 up to 10^6 zoom

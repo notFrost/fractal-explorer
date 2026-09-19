@@ -23,16 +23,18 @@ float escape(vec2 d0) {
   int split = u_ref2;
   int cLast = split - 1;
   int oLast = u_refLen - split - 1;
+  vec2 Zc0 = refAt(0).xy;
+  vec2 Z = refAt(split).xy;
   for (int n = 0; n < u_maxIter; n++) {
-    int base = crit ? 0 : split;
-    vec2 Z = refAt(base + m).xy;
     d = cmul(2.0 * Z + d, d);
     m++;
+    int base = crit ? 0 : split;
     int last = crit ? cLast : oLast;
-    vec2 z = refAt(base + min(m, last)).xy + d;
+    vec2 Zn = refAt(base + min(m, last)).xy;
+    vec2 z = Zn + d;
     float zz = dot(z, z);
     if (zz > 1e4) return smoothT(n + 1, log(zz));
-    if (zz < dot(d, d) || m >= last) { d = z; m = 0; crit = true; }
+    if (zz < dot(d, d) || m >= last) { d = z; m = 0; crit = true; Z = Zc0; } else { Z = Zn; }
   }
   return 0.0;
 }
@@ -50,19 +52,21 @@ float escape(FE d0) {
   int split = u_ref2;
   int cLast = split - 1;
   int oLast = u_refLen - split - 1;
+  vec2 Zc0 = refAt(0).xy;
+  vec2 Z = refAt(split).xy;
   for (int n = 0; n < u_maxIter; n++) {
-    int base = crit ? 0 : split;
-    vec2 Z = refAt(base + m).xy;
     vec2 t = 2.0 * Z + feToFloat(d);
     d = fe(cmul(t, d.m), d.e);
     m++;
+    int base = crit ? 0 : split;
     int last = crit ? cLast : oLast;
-    FE z = feAdd(fe(refAt(base + min(m, last)).xy, 0), d);
+    vec2 Zn = refAt(base + min(m, last)).xy;
+    FE z = feAdd(fe(Zn, 0), d);
     if (z.e >= 6) {
       float zz = dot(z.m, z.m) * pow2(2 * min(z.e, 60));
       if (zz > 1e4) return smoothT(n + 1, log(zz));
     }
-    if (feLess(z, d) || m >= last) { d = z; m = 0; crit = true; }
+    if (feLess(z, d) || m >= last) { d = z; m = 0; crit = true; Z = Zc0; } else { Z = Zn; }
   }
   return 0.0;
 }
