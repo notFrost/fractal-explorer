@@ -80,6 +80,10 @@ const plane = {
   canvas: $('#plane'),
   toggle: $('#plane-toggle'),
 };
+const help = {
+  panel: $('#help'),
+  toggle: $('#help-toggle'),
+};
 const setLabel = $('#set-c');
 const backBtn = $('#back');
 const editor = {
@@ -630,6 +634,31 @@ function setHud(open) {
 }
 
 hud.toggle.addEventListener('click', () => setHud(!hudOpen));
+
+// ---------- The key list ----------
+//
+// Which key does what, along the foot of the viewer. It is remembered per
+// browser the way the plane is, but stays out of the URL: it is chrome around
+// a view rather than part of one, so a shared link should not carry it.
+
+const HELP_STORE = 'help';
+
+let helpOpen = true;
+
+function setHelp(open) {
+  helpOpen = open;
+  help.panel.hidden = !open;
+  help.toggle.setAttribute('aria-pressed', String(open));
+  help.toggle.title = open ? 'Hide the key list (?)' : 'Show the key list (?)';
+  try { localStorage.setItem(HELP_STORE, open ? '1' : '0'); } catch { /* private mode */ }
+}
+
+// Shown until it is turned off, since the keys are how the viewer is flown.
+function initialHelp() {
+  try { return localStorage.getItem(HELP_STORE) !== '0'; } catch { return true; }
+}
+
+help.toggle.addEventListener('click', () => setHelp(!helpOpen));
 
 // ---------- Julia's parameter ----------
 
@@ -1428,6 +1457,8 @@ window.addEventListener('keydown', (e) => {
   if (k === '.') stepPalette(1);
   if (k === 'h') setHud(!hudOpen);
   if (k === 'p') setPlane(!state.plane);
+  // Shift and the slash key give '?' on most layouts and '/' on the rest.
+  if (k === '?' || k === '/') setHelp(!helpOpen);
   if (k === 'r') setAngle(0);
   if (k === 'g') { e.preventDefault(); openGoto(); }
   if (k === 'f') dive();
@@ -1943,6 +1974,7 @@ window.__fx = { state, dive, pickSpot, showViewer, showMenu, showEditor, editFra
 
 setPalette(initialPalette(), { render: false });
 setPlane(initialPlane());
+setHelp(initialHelp());
 state.angle = initialAngle();
 
 // A saved fractal is a set like any other once its shader compiles. One that

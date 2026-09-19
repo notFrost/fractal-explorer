@@ -207,12 +207,33 @@
           </g>
         </svg>
       </button>
+      <button id="help-toggle" class="cbtn" type="button" title="Hide the key list (?)"
+              aria-label="Key list" aria-pressed="true" aria-controls="help">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <rect x="3.5" y="3.5" width="17" height="17" rx="4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M9.5 9.9a2.55 2.55 0 1 1 2.5 3v1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <circle cx="12" cy="16.9" r="1.15" fill="currentColor"/>
+        </svg>
+      </button>
       <button id="save" class="cbtn cbtn-accent" type="button" title="Save PNG (Space)" aria-label="Save PNG">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>
       </button>
     </div>
 
-    <p class="help" id="help">drag or WASD to pan · wheel or Q E to zoom · Z X turn, R levels · [ ] iterations, I fixes them · , . colour · P the plane · H folds the panel · G or paste to go somewhere · F dives somewhere new · V animates · Space saves</p>
+    <p class="help panel" id="help">
+      <span>drag or WASD to pan</span>
+      <span>wheel or Q E to zoom</span>
+      <span>Z X turn, R levels</span>
+      <span>[ ] iterations, I fixes them</span>
+      <span>, . colour</span>
+      <span>P the plane</span>
+      <span>H folds the panel</span>
+      <span>G or paste to go somewhere</span>
+      <span>F dives somewhere new</span>
+      <span>V animates</span>
+      <span>Space saves</span>
+      <span>? hides this</span>
+    </p>
 
     <section id="timeline" class="timeline panel" hidden aria-label="Animation timeline">
       <div class="tl-bar">

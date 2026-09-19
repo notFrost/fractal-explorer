@@ -36,7 +36,10 @@ body.timeline-open .controls {
   bottom: calc(var(--timeline-h, 0px) + 0.75rem);
 }
 
-body.timeline-open .help { display: none; }
+/* The timeline takes the foot of the viewer, so the key list steps aside and
+   its button goes with it rather than staying on as a switch for nothing. */
+body.timeline-open .help,
+body.timeline-open #help-toggle { display: none; }
 
 /* ---------- The transport ---------- */
 
