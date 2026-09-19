@@ -60,8 +60,8 @@ vec3 hsv(float h, float s, float v) {
 
 float penValue(float t) { return clamp(t * 5.0, 0.0, 100.0) / 100.0; }
 
-vec3 penPalette(float t) {
-  return hsv(fract((t + 90.0) / PERIOD), 1.0, penValue(t));
+vec3 penPalette(float t, float stretch) {
+  return hsv(fract((t + 90.0) / (PERIOD * stretch)), 1.0, penValue(t));
 }
 
 // Every hue at full saturation averages to half the value it is drawn at.
@@ -124,8 +124,8 @@ const vec3 INK_PAGE = 0.93 * vec3(1.0, 0.97, 0.9);
 const vec3 CHALK_LINE = 0.92 * vec3(0.9, 0.95, 1.0);
 const vec3 CHALK_PAGE = 0.1 * vec3(0.9, 0.95, 1.0);
 
-vec3 bandPalette(float t, vec3 line, vec3 page) {
-  float band = fract(t / BAND);
+vec3 bandPalette(float t, float stretch, vec3 line, vec3 page) {
+  float band = fract(t / (BAND * stretch));
   float edge = smoothstep(0.0, BAND_EDGE, band) * (1.0 - smoothstep(1.0 - BAND_EDGE, 1.0, band));
   return mix(line, page, edge);
 }
@@ -134,15 +134,16 @@ vec3 bandPalette(float t, vec3 line, vec3 page) {
 // else.
 vec3 bandMean(vec3 line, vec3 page) { return mix(line, page, 1.0 - BAND_EDGE); }
 
-vec3 palette(float t) {
+vec3 palette(float t, float stretch) {
   if (!(t > 0.0)) return vec3(0.0);
-  if (u_palette == 1) return ramp5(classicRamp(), fract(t / PERIOD));
-  if (u_palette == 2) return ramp5(emberRamp(), tri(t / PERIOD) * 0.999);
-  if (u_palette == 3) return ramp5(abyssRamp(), tri(t / PERIOD) * 0.999);
-  if (u_palette == 4) return ramp5(ultravioletRamp(), fract(t / PERIOD));
-  if (u_palette == 5) return bandPalette(t, INK_LINE, INK_PAGE);
-  if (u_palette == 6) return bandPalette(t, CHALK_LINE, CHALK_PAGE);
-  return penPalette(t);
+  float period = PERIOD * stretch;
+  if (u_palette == 1) return ramp5(classicRamp(), fract(t / period));
+  if (u_palette == 2) return ramp5(emberRamp(), tri(t / period) * 0.999);
+  if (u_palette == 3) return ramp5(abyssRamp(), tri(t / period) * 0.999);
+  if (u_palette == 4) return ramp5(ultravioletRamp(), fract(t / period));
+  if (u_palette == 5) return bandPalette(t, stretch, INK_LINE, INK_PAGE);
+  if (u_palette == 6) return bandPalette(t, stretch, CHALK_LINE, CHALK_PAGE);
+  return penPalette(t, stretch);
 }
 
 vec3 paletteMean(float t) {
@@ -157,14 +158,30 @@ vec3 paletteMean(float t) {
 
 float paletteCycle() { return (u_palette == 5 || u_palette == 6) ? BAND : PERIOD; }
 
+// How many pixels wide a cycle is kept once the palette has to stretch.
+const float CYCLE_PX = 4.0;
+
 // A pixel covers as much of the palette as the escape count crosses inside
-// it, so one that crosses a whole cycle covers every colour the palette has.
-// Its point sample is then one of those colours at random, and their mean is
-// the honest answer.
+// it, so one that crosses a whole cycle covers every colour the palette has,
+// and its point sample is one of those colours at random. Doubling the period
+// halves the crossing, so detail too fine for the palette to land on is banded
+// by a palette stretched to meet it, the way a mipmapped texture is read at
+// the level its footprint asks for, and two neighbouring stretches crossfade
+// so the step between them does not show. A cycle as long as the whole
+// iteration budget bands the picture once and is as far as stretching goes;
+// past that the mean is all that is left.
 vec4 shade(float t) {
-  float cycles = fwidth(t) / paletteCycle();
+  float crossed = fwidth(t) * CYCLE_PX / paletteCycle();
+  float wanted = log2(max(crossed, 1.0));
   if (!(t > 0.0)) return vec4(0.0, 0.0, 0.0, 1.0);
-  return vec4(mix(paletteMean(t), palette(t), 1.0 - smoothstep(0.0, 1.0, cycles)), 1.0);
+  float affordable = max(0.0, log2(float(u_maxIter) / paletteCycle()));
+  float doublings = min(wanted, affordable);
+  float lower = floor(doublings);
+  vec3 banded = mix(
+    palette(t, exp2(lower)),
+    palette(t, exp2(lower + 1.0)),
+    smoothstep(0.0, 1.0, doublings - lower));
+  return vec4(mix(banded, paletteMean(t), smoothstep(0.0, 1.0, wanted - affordable)), 1.0);
 }
 
 vec2 csq(vec2 z) { return vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y); }
