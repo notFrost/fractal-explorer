@@ -132,6 +132,7 @@ export async function record({
         cam: view.cam,
         maxIter: iterationsFor(view.cam.lz, detail, set),
         julia: view.julia ?? undefined,
+        vars: view.vars ?? undefined,
         angle: (view.angle * Math.PI) / 180,
       }, stopped);
       if (!drawn) return null;

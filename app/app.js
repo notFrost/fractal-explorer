@@ -1,10 +1,10 @@
-import { SETS, MIN_LOG_ZOOM, MIN_ITER, iterationsFor, baseIterations, iterCeiling } from './fractals.js';
+import { SETS, MIN_LOG_ZOOM, MIN_ITER, iterationsFor, baseIterations, iterCeiling, setLine, valueParts, LABEL_SEP } from './fractals.js';
 import { Camera, formatZoom } from './precision.js';
 import { Renderer } from './gpu.js';
 import { PALETTES, PALETTE_GROUPS, DEFAULT_PALETTE, paletteByKey } from './palettes.js';
 import {
   parseFormula, parseSeed, formulaTokens, seedTokens, varGlsl, freeVarName, varNameError,
-  earlierTerms, earlierLabel, printFormula,
+  earlierTerms, earlierLabel, printFormula, constantValue, valueText,
 } from './formula.js';
 import { partsKey } from './shaders/custom.js';
 import { frameCustom, sizeUp } from './framing.js';
@@ -45,6 +45,10 @@ const state = {
   // formula that reaches back. Ride in the URL as a ?e= each.
   earlier: [],
   vars: [],
+  // What each variable the formula holds at a value is worth in the picture on
+  // screen, by letter. `vars` above is the text the editor keeps for them;
+  // this is what the shader is drawing with, which the timeline can move.
+  values: {},
 };
 
 const $ = (s) => document.querySelector(s);
@@ -83,6 +87,11 @@ const juliaUi = {
   im: $('#julia-im'),
   presets: $('#julia-presets'),
   error: $('#julia-error'),
+};
+const varsUi = {
+  panel: $('#vars-panel'),
+  rows: $('#vars-rows'),
+  error: $('#vars-error'),
 };
 const plane = {
   canvas: $('#plane'),
@@ -138,9 +147,10 @@ const iterNow = () => (state.iterMode === 'fixed'
   ? clampIter(state.fixedIter)
   : iterationsFor(state.cam.lz, state.detail, state.set));
 
-// Everything a frame needs: which set, where, how hard, and Julia's C. The
-// thumbnails and the Julia map pass no angle and stay upright.
-const viewNow = (maxIter = iterNow()) => ({ set: state.set, cam: state.cam, maxIter, julia: state.julia, angle: radians(state.angle) });
+// Everything a frame needs: which set, where, how hard, Julia's C, and what a
+// typed formula's own variables are held at. The thumbnails and the Julia map
+// pass no angle and stay upright.
+const viewNow = (maxIter = iterNow()) => ({ set: state.set, cam: state.cam, maxIter, julia: state.julia, vars: state.values, angle: radians(state.angle) });
 
 // C as text, both for the URL and for the label above the HUD.
 const juliaText = (c) => `${c.re} ${String(c.im).startsWith('-') ? '−' : '+'} ${String(c.im).replace(/^[-+]/, '')}i`;
@@ -677,7 +687,7 @@ help.toggle.addEventListener('click', () => setHelp(!helpOpen));
 
 function showSetLabel() {
   const text = state.set === 'julia' ? `C = ${juliaText(state.julia)}`
-    : SETS[state.set].custom ? SETS[state.set].formula
+    : SETS[state.set].custom ? setLine(state.set, state.values)
     : '';
   setLabel.textContent = text;
   setLabel.hidden = !text;
@@ -875,6 +885,137 @@ juliaUi.map.addEventListener('keydown', (e) => {
   applyJulia(mapText(Number(state.julia.re) + step[0] * d), mapText(Number(state.julia.im) + step[1] * d));
 });
 
+// ---------- The formula's own variables ----------
+//
+// A variable whose starting value is one pair of numbers is a uniform in the
+// shader rather than a value worked out under every pixel, so nothing
+// recompiles when it changes. It moves from the boxes here, and along the
+// timeline from one keyframe to the next. A variable built from x and y varies
+// across the picture instead, and has no one value to show.
+
+// Fine enough that an exponent walked from 1 to 2 by the arrow keys passes
+// through a hundred fractals on the way.
+const VALUE_STEP = 0.01;
+
+const copyValues = (values) =>
+  Object.fromEntries(Object.entries(values ?? {}).map(([name, v]) => [name, { ...v }]));
+
+const readValue = (re, im) => {
+  const ok = (s) => String(s).trim() !== '' && Number.isFinite(Number(s));
+  return ok(re) && ok(im) ? { re: Number(re), im: Number(im) } : null;
+};
+
+const valueRows = new Map();
+
+function valueInput(name, what, start) {
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.className = 'input';
+  input.step = String(VALUE_STEP);
+  input.value = String(start);
+  input.setAttribute('aria-label', `${what} of ${name}`);
+  input.addEventListener('change', () => applyValue(name));
+  input.addEventListener('input', () => { varsUi.error.textContent = ''; });
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    applyValue(name);
+  });
+  return input;
+}
+
+function valueRow(name) {
+  const row = document.createElement('div');
+  row.className = 'vars-row';
+  const letter = document.createElement('span');
+  letter.className = 'hud-k';
+  letter.textContent = name;
+  const held = state.values[name];
+  const re = valueInput(name, 'Real part', held.re);
+  const im = valueInput(name, 'Imaginary part', held.im);
+  const plus = document.createElement('span');
+  plus.className = 'vars-op';
+  plus.textContent = '+';
+  const i = document.createElement('span');
+  i.className = 'vars-op';
+  i.textContent = 'i';
+  row.append(letter, re, plus, im, i);
+  valueRows.set(name, { re, im });
+  return row;
+}
+
+// The panel only means anything for a formula holding a variable at a value,
+// so it is hidden everywhere else.
+function showVarsUi() {
+  const names = Object.keys(state.values);
+  valueRows.clear();
+  varsUi.error.textContent = '';
+  varsUi.panel.hidden = !names.length;
+  varsUi.rows.replaceChildren(...names.map(valueRow));
+}
+
+function showValueRow(name) {
+  const row = valueRows.get(name);
+  const held = state.values[name];
+  if (!row || !held) return;
+  row.re.value = String(held.re);
+  row.im.value = String(held.im);
+}
+
+// Applies what is in one variable's pair of boxes. Bad input keeps the old
+// value and says so, the way Julia's C does.
+function applyValue(name) {
+  const row = valueRows.get(name);
+  const held = row && readValue(row.re.value, row.im.value);
+  if (!held) {
+    varsUi.error.textContent = 'could not read that';
+    showValueRow(name);
+    return;
+  }
+  const was = state.values[name];
+  if (held.re === was.re && held.im === was.im) return;
+  state.values = { ...state.values, [name]: held };
+  rememberValue(name, held);
+  showSetLabel();
+  requestRender();
+}
+
+// The editor's own set is whatever stands in its fields, and the link carries
+// those fields, so a variable moved in the viewer moves in the link too and
+// Menu goes back to the formula that was on screen. A fractal saved to the
+// menu keeps the value it was saved with, and what the viewer holds it at
+// lasts as long as the visit, the way Julia's C does.
+function rememberValue(name, held) {
+  if (state.set !== 'custom') return;
+  const at = state.vars.findIndex((v) => v.name === name);
+  if (at < 0) return;
+  state.vars[at] = { ...state.vars[at], seed: valueText(held) };
+  SETS.custom.values = { ...SETS.custom.values, [name]: held };
+  const url = new URL(location.href);
+  putVarParams(url, state.vars);
+  history.replaceState(null, '', url);
+}
+
+// What a scrub or a rendered frame puts back, and whether anything moved.
+// Only the variables this set has: an animation pasted from another fractal
+// may name others.
+function takeValues(vars) {
+  let moved = false;
+  const next = {};
+  for (const [name, was] of Object.entries(state.values)) {
+    const held = vars[name] ?? was;
+    if (held.re !== was.re || held.im !== was.im) moved = true;
+    next[name] = held;
+  }
+  if (moved) state.values = next;
+  return moved;
+}
+
+function showValues() {
+  for (const name of valueRows.keys()) showValueRow(name);
+  showSetLabel();
+}
+
 // ---------- The formula editor ----------
 
 const DEFAULTS = {
@@ -1012,29 +1153,57 @@ function parseCustom(texts) {
   return parsed;
 }
 
-const shaderParts = (parsed) => ({
-  iter: parsed.formula.glsl,
-  seeds: [
-    ...parsed.vars.map((v) => ({ name: varGlsl(v.name), glsl: v.seed.glsl })),
-    { name: 'c', glsl: parsed.seedC.glsl },
-    { name: 'z', glsl: parsed.seedZ.glsl },
-  ],
-  earlier: parsed.earlier.map((s) => s.glsl),
-});
+// A variable whose starting value never reads the pixel is one pair of numbers
+// the shader can hold in a uniform, which is what lets a movie move it. The
+// rest are worked out per pixel, as z₀ and c are.
+function shaderParts(parsed) {
+  const live = [];
+  const seeds = [];
+  for (const v of parsed.vars) {
+    const held = constantValue(v.seed.tree);
+    if (held) live.push({ name: v.name, ...held });
+    else seeds.push({ name: varGlsl(v.name), glsl: v.seed.glsl });
+  }
+  return {
+    iter: parsed.formula.glsl,
+    seeds: [...seeds, { name: 'c', glsl: parsed.seedC.glsl }, { name: 'z', glsl: parsed.seedZ.glsl }],
+    earlier: parsed.earlier.map((s) => s.glsl),
+    live,
+  };
+}
+
+const liveValues = (parts) =>
+  Object.fromEntries(parts.live.map((v) => [v.name, { re: v.re, im: v.im }]));
+
+// partsKey leaves the values of held variables out, since the program is the
+// same whatever they are. The picture is not, so what the preview redraws on
+// keeps them.
+const previewKeyFor = (parts) =>
+  [partsKey(parts), ...parts.live.map((v) => `${v.name}=${v.re},${v.im}`), state.palette].join('|');
 
 const DEFAULT_GLSL = Object.fromEntries(FIELDS.map((f) => [f.key, f.parse(DEFAULTS[f.key]).glsl]));
 
 const usual = (parsed, field) => parsed[field.key].glsl === DEFAULT_GLSL[field.key];
 
-function customLabel(parsed) {
-  const parts = [`z ← ${parsed.formula.text}`];
+// A variable held at a value is left out. setLine writes those at the value
+// the picture is drawing, which is not always the one that was typed.
+function customLabel(parsed, parts) {
+  const live = new Set(parts.live.map((v) => v.name));
+  const said = [`z ← ${parsed.formula.text}`];
   for (const f of SEED_FIELDS) {
-    if (!usual(parsed, f)) parts.push(`${f.label} = ${parsed[f.key].text}`);
+    if (!usual(parsed, f)) said.push(`${f.label} = ${parsed[f.key].text}`);
   }
-  parsed.earlier.forEach((s, at) => parts.push(`${earlierLabel(at + 1)} = ${s.text}`));
-  for (const v of parsed.vars) parts.push(`${v.name} = ${v.seed.text}`);
-  return parts.join('  ·  ');
+  parsed.earlier.forEach((s, at) => said.push(`${earlierLabel(at + 1)} = ${s.text}`));
+  for (const v of parsed.vars) {
+    if (!live.has(v.name)) said.push(`${v.name} = ${v.seed.text}`);
+  }
+  return said.join(LABEL_SEP);
 }
+
+// The whole line, for the editor's preview, which has no panel of variables
+// beside it to read the values off.
+const customLine = (parsed, parts) =>
+  [customLabel(parsed, parts), ...valueParts(liveValues(parts))].join(LABEL_SEP);
 
 // Where a fractal of this kind usually sits: a Julia set, whose pixel is z₀
 // under a fixed parameter, around the origin, and a parameter plane where the
@@ -1063,10 +1232,14 @@ function writeCustomUrl(texts, parsed) {
   }
   url.searchParams.delete('e');
   for (const text of texts.earlier) url.searchParams.append('e', text);
-  url.searchParams.delete('v');
-  for (const v of texts.vars) url.searchParams.append('v', `${v.name}:${v.seed}`);
+  putVarParams(url, texts.vars);
   history.replaceState(null, '', url);
 }
+
+const putVarParams = (url, vars) => {
+  url.searchParams.delete('v');
+  for (const v of vars) url.searchParams.append('v', `${v.name}:${v.seed}`);
+};
 
 const trimTexts = (texts) => ({
   ...Object.fromEntries(FIELDS.map((f) => [f.key, String(texts[f.key] ?? '').trim()])),
@@ -1097,7 +1270,8 @@ function applyCustom(texts) {
   }
   committed = { texts: kept, parts };
   Object.assign(state, kept);
-  SETS.custom.formula = customLabel(parsed);
+  SETS.custom.formula = customLabel(parsed, parts);
+  SETS.custom.values = liveValues(parts);
   SETS.custom.home = customHome(parsed, parts);
   writeCustomUrl(kept, parsed);
   return null;
@@ -1134,7 +1308,7 @@ function updatePreview(framed = null) {
     return;
   }
   const parts = shaderParts(parsed);
-  const key = `${partsKey(parts)}|${state.palette}`;
+  const key = previewKeyFor(parts);
   if (key !== previewKey) {
     try {
       drawPreview(parts, framed ?? customHome(parsed, parts));
@@ -1143,7 +1317,7 @@ function updatePreview(framed = null) {
       return;
     }
     previewKey = key;
-    preview.note.textContent = customLabel(parsed);
+    preview.note.textContent = customLine(parsed, parts);
   }
   preview.box.classList.remove('stale');
 }
@@ -1495,7 +1669,8 @@ function registerFractal(fractal) {
   }
   registerSet(fractal.id, {
     name: fractal.name,
-    formula: customLabel(parsed),
+    formula: customLabel(parsed, parts),
+    values: liveValues(parts),
     home: customHome(parsed, parts),
     edit: asParsed(trimTexts(fractal), parsed),
   });
@@ -2094,6 +2269,7 @@ function showViewer(set, view) {
     return;
   }
   state.set = set;
+  state.values = copyValues(SETS[set].values);
   fitIterSlider();
   if (view) state.cam = new Camera(view.x, view.y, view.zoom);
   mode = 'view';
@@ -2106,6 +2282,7 @@ function showViewer(set, view) {
   studio?.load(set);
   backBtn.textContent = set === 'custom' ? '← Formula' : '← Menu';
   backBtn.title = set === 'custom' ? 'Back to the formula (Esc)' : 'Back to menu (Esc)';
+  showVarsUi();
   showJuliaUi();
 
   hud.bookmarks.replaceChildren(
@@ -2240,6 +2417,7 @@ function keyframeThumb(view, w, h) {
     cam: view.cam,
     maxIter: iterationsFor(view.cam.lz, 1, state.set),
     julia: view.julia ?? state.julia,
+    vars: view.vars ?? state.values,
     angle: radians(view.angle),
   }, w, h);
   if (!bytes) return null;
@@ -2250,7 +2428,12 @@ function keyframeThumb(view, w, h) {
 }
 
 studio = createStudio({
-  view: () => ({ cam: state.cam, angle: state.angle, julia: state.set === 'julia' ? state.julia : null }),
+  view: () => ({
+    cam: state.cam,
+    angle: state.angle,
+    julia: state.set === 'julia' ? state.julia : null,
+    vars: copyValues(state.values),
+  }),
 
   show: (view) => {
     cancelDrift();
@@ -2259,15 +2442,17 @@ studio = createStudio({
     const movedC = Boolean(view.julia) && state.set === 'julia'
       && (view.julia.re !== state.julia.re || view.julia.im !== state.julia.im);
     if (movedC) state.julia = view.julia;
+    const movedVars = Boolean(view.vars) && takeValues(view.vars);
     // An export owns the canvas, so the panel follows the camera in the HUD
     // and nothing draws. Redrawing the map and its marker is cheap otherwise,
     // but not sixty times a second for a C that has not moved.
     if (studio?.busy) {
       updateHud();
-      if (movedC) showSetLabel();
+      if (movedC || movedVars) showSetLabel();
       return;
     }
     if (movedC) showJuliaUi();
+    if (movedVars) showValues();
     requestRender();
   },
 

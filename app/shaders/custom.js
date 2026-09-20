@@ -1,4 +1,4 @@
-import { earlierGlsl } from '../formula.js';
+import { earlierGlsl, varGlsl } from '../formula.js';
 
 export const CUSTOM_LIB = `
 vec2 cdiv(vec2 a, vec2 b) { return vec2(dot(a, b), a.y * b.x - a.x * b.y) / dot(b, b); }
@@ -52,15 +52,21 @@ const carry = (iter, depth) => [
   '    z = nz;',
 ].join('\n');
 
-export const partsKey = ({ iter, seeds, earlier = [] }) =>
-  [iter, ...seeds.map((s) => `${s.name}=${s.glsl}`), ...earlier].join('|');
+// A variable the formula holds at one pair of numbers is taken as a uniform
+// rather than worked out again under every pixel. One program then draws every
+// value of it, so a movie can slide it from frame to frame without the GPU
+// compiling anything. The values are therefore no part of the key, and each
+// draw says which ones it wants.
+export const partsKey = ({ iter, seeds, earlier = [], live = [] }) =>
+  [iter, ...seeds.map((s) => `${s.name}=${s.glsl}`), ...earlier, ...live.map((v) => `~${v.name}`)].join('|');
 
-function escapeLib({ iter, seeds, earlier = [] }) {
+function escapeLib({ iter, seeds, earlier = [], live = [] }) {
+  const held = live.map((v) => `uniform vec2 ${varGlsl(v.name)};`).join('\n');
   const start = [
     ...seeds.map(({ name, glsl }) => `  vec2 ${name} = ${glsl};`),
     ...earlier.map((glsl, at) => `  vec2 ${earlierGlsl(at + 1)} = ${glsl};`),
   ].join('\n');
-  return CUSTOM_LIB + `
+  return CUSTOM_LIB + held + `
 float escape(vec2 p) {
 ${start}
   for (int n = 0; n < u_maxIter; n++) {

@@ -386,6 +386,119 @@ function parse(src, mode) {
 export const parseFormula = (src, extras = []) => parse(src, iteration(extras));
 export const parseSeed = (src, extras = []) => parse(src, seed(extras));
 
+
+// ---------- The tree as one pair of numbers ----------
+
+// A starting value that never reads the pixel is the same pair of numbers
+// everywhere in the picture and in every frame of a movie. The shader takes
+// those as a uniform rather than working them out per pixel, which is what
+// lets the timeline move a variable without recompiling anything. This works
+// the pair out, and says null for a value built from x or y.
+//
+// The arithmetic matches CUSTOM_LIB's, down to the clamp on exp, so the number
+// handed to the GPU is the one the GPU would have reached itself.
+
+const pair = (re, im = 0) => ({ re, im });
+
+const vAdd = (a, b) => pair(a.re + b.re, a.im + b.im);
+const vSub = (a, b) => pair(a.re - b.re, a.im - b.im);
+const vMul = (a, b) => pair(a.re * b.re - a.im * b.im, a.re * b.im + a.im * b.re);
+
+function vDiv(a, b) {
+  const d = b.re * b.re + b.im * b.im;
+  return pair((a.re * b.re + a.im * b.im) / d, (a.im * b.re - a.re * b.im) / d);
+}
+
+function vExp(a) {
+  const r = Math.exp(Math.min(a.re, 60));
+  return pair(r * Math.cos(a.im), r * Math.sin(a.im));
+}
+
+const vLog = (a) => pair(0.5 * Math.log(a.re * a.re + a.im * a.im), Math.atan2(a.im, a.re));
+
+function vSqrt(a) {
+  const r = Math.hypot(a.re, a.im);
+  if (r === 0) return pair(0);
+  return pair(Math.sqrt(0.5 * (r + a.re)), (a.im < 0 ? -1 : 1) * Math.sqrt(0.5 * (r - a.re)));
+}
+
+const vSin = (a) => pair(Math.sin(a.re) * Math.cosh(a.im), Math.cos(a.re) * Math.sinh(a.im));
+const vCos = (a) => pair(Math.cos(a.re) * Math.cosh(a.im), -Math.sin(a.re) * Math.sinh(a.im));
+const vSinh = (a) => pair(Math.sinh(a.re) * Math.cos(a.im), Math.cosh(a.re) * Math.sin(a.im));
+const vCosh = (a) => pair(Math.cosh(a.re) * Math.cos(a.im), Math.sinh(a.re) * Math.sin(a.im));
+
+const VALUE_FUNCS = {
+  abs: (a) => pair(Math.hypot(a.re, a.im)),
+  re: (a) => pair(a.re),
+  im: (a) => pair(a.im),
+  conj: (a) => pair(a.re, -a.im),
+  exp: vExp, log: vLog, ln: vLog, sqrt: vSqrt,
+  sin: vSin, cos: vCos, tan: (a) => vDiv(vSin(a), vCos(a)),
+  sinh: vSinh, cosh: vCosh, tanh: (a) => vDiv(vSinh(a), vCosh(a)),
+};
+
+const CONST_VALUES = { i: pair(0, 1), pi: pair(Math.PI), e: pair(Math.E) };
+
+function vPowInt(a, n) {
+  let k = Math.abs(n);
+  let r = pair(1);
+  let b = a;
+  while (k) {
+    if (k & 1) r = vMul(r, b);
+    b = vMul(b, b);
+    k >>= 1;
+  }
+  return n < 0 ? vDiv(pair(1), r) : r;
+}
+
+function vPow(a, b) {
+  if (b.im === 0 && Number.isInteger(b.re) && Math.abs(b.re) <= 64) return vPowInt(a, b.re);
+  return a.re === 0 && a.im === 0 ? pair(0) : vExp(vMul(b, vLog(a)));
+}
+
+// Null anywhere a branch reads the pixel, and null up the tree from there.
+function valueOf(node) {
+  const both = (fn) => {
+    const a = valueOf(node.a);
+    const b = valueOf(node.b);
+    return a && b ? fn(a, b) : null;
+  };
+  switch (node.k) {
+    case 'num': return pair(node.v);
+    case 'const': return CONST_VALUES[node.name];
+    case 'call': {
+      const a = valueOf(node.arg);
+      return a ? VALUE_FUNCS[node.fn](a) : null;
+    }
+    case 'neg': {
+      const a = valueOf(node.a);
+      return a ? pair(-a.re, -a.im) : null;
+    }
+    case 'add': return both(node.op === '+' ? vAdd : vSub);
+    case 'mul': return both(vMul);
+    case 'div': return both(vDiv);
+    case 'pow': return both(vPow);
+    default: return null;
+  }
+}
+
+// Arithmetic that ran off the end — a division by a computed zero, a log of
+// nothing — leaves no value for the shader to hold, so that starting value
+// stays one the pixel works out for itself.
+export function constantValue(tree) {
+  const v = valueOf(tree);
+  return v && Number.isFinite(v.re) && Number.isFinite(v.im) ? v : null;
+}
+
+const shortNumber = (v) => String(Number(v.toPrecision(12)));
+
+// The pair written the way the editor's own fields are written, so a value
+// shown in the HUD or carried in a link reads back as the line that made it.
+export function valueText({ re, im }) {
+  if (!im) return shortNumber(re);
+  const mag = Math.abs(im) === 1 ? '' : shortNumber(Math.abs(im));
+  return re ? `${shortNumber(re)}${im < 0 ? '-' : '+'}${mag}i` : `${im < 0 ? '-' : ''}${mag}i`;
+}
 // ---------- The tree as a line to type ----------
 
 // What invent.js hands back to the field. A bracket goes in where precedence

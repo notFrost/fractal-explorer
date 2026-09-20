@@ -169,6 +169,12 @@
           <span id="julia-error" class="goto-error" role="alert"></span>
         </div>
 
+        <div id="vars-panel" class="vars" hidden>
+          <span class="hud-k vars-title">vars</span>
+          <div id="vars-rows" class="vars-rows"></div>
+          <span id="vars-error" class="goto-error" role="alert"></span>
+        </div>
+
         <div class="hud-row hud-bookmarks" id="bookmarks"></div>
 
         <form id="goto" class="goto" hidden autocomplete="off">
@@ -267,7 +273,7 @@
       </div>
 
       <ol id="tl-keys" class="tl-keys"></ol>
-      <p id="tl-empty" class="tl-empty">Put the view somewhere worth starting from and press <b>+ Keyframe</b>. Move it and press again: the animation runs from each keyframe to the next, zooming, panning and turning the whole way.</p>
+      <p id="tl-empty" class="tl-empty">Put the view somewhere worth starting from and press <b>+ Keyframe</b>. Move it and press again: the animation runs from each keyframe to the next, zooming, panning and turning the whole way. A keyframe also holds the formula's own variables, so leaving the view where it is and moving one of those instead animates the fractal rather than the camera.</p>
 
       <form id="tl-export" class="tl-export" hidden autocomplete="off">
         <label class="tl-field"><span class="hud-k">format</span><select id="tl-format" class="input"></select></label>

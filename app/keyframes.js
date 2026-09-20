@@ -1,10 +1,13 @@
 // The animation model: the keyframes a movie passes through, and the camera
 // at any moment between them.
 //
-// A keyframe is a whole view — centre, zoom, rotation, and Julia's parameter
-// where the set has one. The centre is kept as the decimal strings the camera
-// prints rather than as a double, so a keyframe taken at 10^300 is the point
-// it was taken at.
+// A keyframe is a whole view — centre, zoom, rotation, Julia's parameter where
+// the set has one, and what a typed formula's own variables are held at. The
+// centre is kept as the decimal strings the camera prints rather than as a
+// double, so a keyframe taken at 10^300 is the point it was taken at.
+//
+// Two keyframes on one spot with a variable at 1 and then at 2 are a movie
+// that stands still and watches the fractal change instead.
 
 import { Camera, bitsFor, parseDecimal, scaleFixed } from './precision.js';
 import { SETS, MIN_LOG_ZOOM } from './fractals.js';
@@ -60,6 +63,22 @@ const readC = (c) => (c && Number.isFinite(Number(c.re)) && Number.isFinite(Numb
   ? { re: String(c.re), im: String(c.im) }
   : null);
 
+// A variable is kept as numbers rather than as the strings Julia's C keeps:
+// nobody types one into a URL, and what the shader takes is a pair of floats.
+const readValue = (v) => (v && Number.isFinite(Number(v.re)) && Number.isFinite(Number(v.im))
+  ? { re: Number(v.re), im: Number(v.im) }
+  : null);
+
+function readValues(vars) {
+  if (!vars || typeof vars !== 'object') return null;
+  const out = {};
+  for (const [name, v] of Object.entries(vars)) {
+    const held = readValue(v);
+    if (held) out[name] = held;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 const readable = (k) => k !== null && typeof k === 'object'
   && typeof k.x === 'string' && typeof k.y === 'string' && Number.isFinite(Number(k.lz));
 
@@ -70,6 +89,7 @@ function tidyKey(k) {
     lz: num(k.lz, MIN_LOG_ZOOM),
     angle: num(k.angle),
     julia: readC(k.julia),
+    vars: readValues(k.vars),
     hold: Math.max(0, num(k.hold, DEFAULT_HOLD)),
     span: Math.max(0, num(k.span, DEFAULT_SPAN)),
   };
@@ -83,13 +103,14 @@ function windNear(deg, near) {
   return deg + Math.round((near - deg) / 360) * 360;
 }
 
-export function keyFrom({ cam, angle, julia }, before = null) {
+export function keyFrom({ cam, angle, julia, vars }, before = null) {
   return tidyKey({
     x: cam.xString(),
     y: cam.yString(),
     lz: cam.lz,
     angle: before ? windNear(angle, before.angle) : angle,
     julia: julia ? { ...julia } : null,
+    vars,
     hold: DEFAULT_HOLD,
     span: before ? before.span : DEFAULT_SPAN,
   });
@@ -157,11 +178,24 @@ export const keyState = (p, at) => ({
   cam: Camera.fromFixed(p.fixed[at].x, p.fixed[at].y, p.bits, p.keys[at].lz),
   angle: p.keys[at].angle,
   julia: p.keys[at].julia,
+  vars: p.keys[at].vars,
 });
+
+// A variable one keyframe holds and the other does not stands still: the pair
+// says nothing about where it would go.
+function crossVars(a, b, u) {
+  if (!a || !b) return a ?? b;
+  const out = { ...a, ...b };
+  for (const [name, was] of Object.entries(a)) {
+    if (b[name]) out[name] = { re: lerp(was.re, b[name].re, u), im: lerp(was.im, b[name].im, u) };
+  }
+  return out;
+}
 
 const cText = (v) => String(Number(v.toPrecision(12)));
 
-// Where the view stands at time t: the camera, the turn, and Julia's C.
+// Where the view stands at time t: the camera, the turn, Julia's C, and what
+// the formula's own variables are held at.
 export function sample(p, t) {
   if (!p.keys.length) return null;
   if (!p.pieces.length) return keyState(p, 0);
@@ -192,6 +226,7 @@ export function sample(p, t) {
   return {
     cam,
     angle: lerp(a.angle, b.angle, u),
+    vars: crossVars(a.vars, b.vars, u),
     julia: a.julia && b.julia
       ? {
         re: cText(lerp(Number(a.julia.re), Number(b.julia.re), u)),

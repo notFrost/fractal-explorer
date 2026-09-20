@@ -2,7 +2,7 @@
 // set, the folders they can be filed under, and the drag that moves both.
 // Thumbnails are painted by whoever owns the GL canvas, through repaint.
 
-import { SETS } from './fractals.js';
+import { SETS, setLine } from './fractals.js';
 import { readLayout, writeLayout, reconcile, freeFolderId, freeFolderName } from './library.js';
 
 // Pixels of travel before a press on a grip becomes a drag, rather than a
@@ -47,7 +47,7 @@ export function createGrid({ list, note, deletable, onOpen, onEdit, onDelete, re
     name.textContent = SETS[set].name;
     const formula = document.createElement('span');
     formula.className = 'card-formula';
-    formula.textContent = SETS[set].formula;
+    formula.textContent = setLine(set);
     card.append(thumb, name, formula);
     card.addEventListener('click', () => onOpen(set));
 

@@ -15,6 +15,8 @@ in as many strips as the card needs.
 
 Any view can be taken as a keyframe, and the timeline under the viewer renders
 the path between keyframes out to an MP4 or a GIF with every frame drawn whole.
+A keyframe holds the formula's own variables as well as the camera, so a movie
+can stand still and change the fractal instead.
 
 ## Name
 
@@ -330,10 +332,11 @@ had to be recomputed.
 
 **V**, or the clapper button, opens a timeline across the foot of the viewer.
 **+ Keyframe**, or **K**, takes the whole view as it stands — centre, zoom,
-rotation, and Julia's `C` — and puts it on the strip. Move the view and press
-again. The animation runs from each keyframe to the next, and building one is
-the same work as exploring: the die, the go-to form, a bookmark and a pasted
-link all leave a view a keyframe can be taken from.
+rotation, Julia's `C`, and whatever a typed formula's variables are held at —
+and puts it on the strip. Move the view and press again. The animation runs
+from each keyframe to the next, and building one is the same work as exploring:
+the die, the go-to form, a bookmark and a pasted link all leave a view a
+keyframe can be taken from.
 
 Each card carries two numbers. `hold` is the seconds the view stands still on
 that keyframe, and `then` is the seconds it takes to reach the next one; the
@@ -348,6 +351,34 @@ as a double, so one taken at 10^300 is the point it was taken at. The
 thumbnails are drawn away from the canvas, into the same offscreen target the
 coarse pass uses, so taking a keyframe does not blur the picture and snap it
 back.
+
+### Moving the formula, not the camera
+
+A keyframe also records what a typed formula's own variables are held at, so an
+animation can leave the view exactly where it is and change the fractal under
+it instead. Webb is `zₙ₊₁ = zₙ² + zₙ₋₁`. Written as `Z_(n+1) = Z_(n)^a +
+Z_(n-1)` with a variable `a = 2` it is the same set, and a keyframe at `a = 1`
+followed by one at `a = 2` runs it from a blob to the six arms with every
+exponent between the two drawn on the way. The two kinds of motion mix, so the
+exponent can slide while the camera dives.
+
+A variable whose starting value is one pair of numbers, `2` or `0.5+0.3i` or
+`pi/8` or anything else that never reads `x` or `y`, is a `vec2` uniform in the
+compiled shader rather than a value worked out under every pixel. That is what
+lets it move. Nothing recompiles between frames, so one program draws every
+value of it and a sweep costs what a pan costs. JavaScript works the pair out
+by the arithmetic the shader's own library uses, so the number handed over is
+the one the GPU would have reached. A variable built from the pixel, `k = x+yi`,
+varies across the picture and has no one value to move, so it compiles as it
+always did.
+
+Those variables get a **vars** panel in the HUD, a real and an imaginary box
+each, which the arrow keys step by 0.01. What stands there is what the picture
+is drawn at and what **+ Keyframe** takes. The editor's own set carries its
+fields in the link, so a value moved in the viewer moves in the link too, and
+Menu goes back to the formula that was on screen. A fractal saved to the menu
+keeps the value it was saved with, and what the viewer holds it at lasts as
+long as the visit, the way Julia's `C` does.
 
 ### The path between two keyframes
 
@@ -375,6 +406,10 @@ already is carries the shift, since `round(share × 2^bits)` flushes a share of
 2^-1000 to zero long before the picture stops moving. A zoom out measured
 against the matching zoom in agrees to 6×10^-13 stage pixels over 293
 doublings.
+
+A formula's variables cross evenly as well. One that only one of the two
+keyframes names stands still, since the pair says nothing about where it would
+go.
 
 Rotation crosses at an even pace, and what a keyframe records is the total
 turn rather than the angle modulo a whole one. A captured angle takes the
@@ -531,7 +566,9 @@ refused rather than rendered. The × beside a letter drops it. `z₀` and `c`
 have no ×, since the formula and the pixel are written in terms of them. A
 letter joins the key under the formula the moment it exists, so `z² + kc`
 reads `k` as a variable once `k` is there and as an unknown name before
-that.
+that. A variable set to a plain value rather than to something built from `x`
+and `y` also turns up in the viewer's **vars** panel and on every keyframe,
+which is how an animation slides it from one value to the next.
 
 Beside the fields is a live preview of the view **Render** will open on, at
 most 640 pixels across. It redraws a quarter second after the last keystroke,

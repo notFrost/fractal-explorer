@@ -161,6 +161,16 @@ body.timeline-open #help-toggle { display: none; }
   text-overflow: ellipsis;
 }
 
+/* What the formula's own variables are held at on this keyframe, when the
+   fractal has any. */
+.tl-key-vars {
+  color: var(--magenta);
+  font-size: 0.85em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .tl-key-times {
   display: flex;
   gap: 0.3rem;
